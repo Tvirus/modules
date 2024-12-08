@@ -44,14 +44,12 @@ typedef union
 
 typedef int (*key_cb_t)(unsigned char key_id, unsigned char key_type, signed int event);
 
-/* 注册按键 */
+extern void key_task(void);
 extern int key_register(unsigned char key_id, unsigned char key_type, const key_cfg_t *key_cfg);
-/* 注册按键回调 */
 extern int key_register_cb(unsigned char key_id, unsigned char key_type, key_cb_t cb);
 #define BUTTON_RELEASED 0
 #define BUTTON_PRESSED  1
 extern int key_set_value(unsigned char key_id, unsigned char key_type, signed int value);
-extern void key_service_task(void);
 
 
 #endif

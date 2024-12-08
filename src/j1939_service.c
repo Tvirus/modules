@@ -143,25 +143,23 @@ int j1939_register_large_msg_cb(const j1939_msg_header_t *header, unsigned char 
     return -1;
 }
 
-int j1939_put_can_msg(const can_msg_t *msg)
+int j1939_recv_can_msg(const can_msg_t *msg)
 {
     if ((NULL == msg) || (8 < msg->dlc))
         return -1;
 
-    __disable_irq();
     if ((can_msg_tail + 1 == can_msg_head) || ((0 == can_msg_head) && (CAN_MSG_COUNT_MAX - 1 == can_msg_tail)))
     {
-        __enable_irq();
-        LOG(LOGLEVEL_ERROR, "put can msg failed !\n");
+        LOG(LOGLEVEL_ERROR, "recv can msg failed !\n");
         return -1;
     }
 
     can_msg_ring_buf[can_msg_tail] = *msg;
 
-    can_msg_tail++;
-    if (CAN_MSG_COUNT_MAX <= can_msg_tail)
+    if ((CAN_MSG_COUNT_MAX - 1) <= can_msg_tail)
         can_msg_tail = 0;
-    __enable_irq();
+    else
+        can_msg_tail++;
 
     return 0;
 }
@@ -673,8 +671,8 @@ static void handle_tpcm_abort(const j1939_msg_header_t *header, unsigned char *d
 }
 
 
-#define J1939_SERVER_TASK_PERIOD  5  /* ms */
-void j1939_service_task(void)
+#define J1939_TASK_PERIOD  5  /* ms */
+void j1939_task(void)
 {
     static unsigned int last_ts = 0;
     unsigned int current_ts;
@@ -691,7 +689,7 @@ void j1939_service_task(void)
 
 
     current_ts = HAL_GetTick();
-    if (J1939_SERVER_TASK_PERIOD > ((unsigned int)(current_ts - last_ts)))
+    if (J1939_TASK_PERIOD > ((unsigned int)(current_ts - last_ts)))
         return;
     last_ts = current_ts;
 
@@ -730,9 +728,10 @@ void j1939_service_task(void)
         handle_tpcm_abort(&header, can_msg->data, can_msg->dlc);
 
     CONTINUE:
-        can_msg_head++;
-        if (CAN_MSG_COUNT_MAX <= can_msg_head)
+        if ((CAN_MSG_COUNT_MAX - 1) <= can_msg_head)
             can_msg_head = 0;
+        else
+            can_msg_head++;
     }
 
     /* TX */
@@ -826,5 +825,5 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     else
         msg.rtr = 0;
     msg.dlc = header.DLC;
-    j1939_put_can_msg(&msg);
+    j1939_recv_can_msg(&msg);
 }

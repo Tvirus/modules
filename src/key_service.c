@@ -192,8 +192,8 @@ static void do_cb(unsigned char key_id, unsigned char key_type, signed int event
         key_cb_list[i].cb(key_id, key_type, event);
     }
 }
-#define KEY_SERVER_TASK_PERIOD  10  /* ms */
-void key_service_task(void)
+#define KEY_TASK_PERIOD  10  /* ms */
+void key_task(void)
 {
     static unsigned int last_ts = 0;
     unsigned int current_ts;
@@ -204,7 +204,7 @@ void key_service_task(void)
 
 
     current_ts = HAL_GetTick();
-    if ((0 == key_changed) && (KEY_SERVER_TASK_PERIOD > ((unsigned int)(current_ts - last_ts))))
+    if ((0 == key_changed) && (KEY_TASK_PERIOD > ((unsigned int)(current_ts - last_ts))))
         return;
     key_changed = 0;
     last_ts = current_ts;
