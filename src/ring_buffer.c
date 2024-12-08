@@ -20,7 +20,7 @@ int rbuf_init(ring_buffer_t *ring_buf, unsigned char *buf, unsigned int buf_size
     return 0;
 }
 
-unsigned int rbuf_put(ring_buffer_t *ring_buf, const unsigned char *data, unsigned int count)
+unsigned int rbuf_put(ring_buffer_t *ring_buf, const unsigned char *data, unsigned int count, unsigned char full_mode)
 {
     unsigned char *buf;
     unsigned int member_size;
@@ -51,7 +51,12 @@ unsigned int rbuf_put(ring_buffer_t *ring_buf, const unsigned char *data, unsign
     {
         max = head - tail - 1;
         if (max < count)
-            count = max;
+        {
+            if (full_mode)
+                return 0;
+            else
+                count = max;
+        }
         memcpy(buf + (tail * member_size), data, count * member_size);
         ring_buf->tail = tail + count;
         return count;
@@ -59,7 +64,12 @@ unsigned int rbuf_put(ring_buffer_t *ring_buf, const unsigned char *data, unsign
 
     max = member_count - tail + head - 1;
     if (max < count)
-        count = max;
+    {
+        if (full_mode)
+            return 0;
+        else
+            count = max;
+    }
     n1 = member_count - tail;
     if (count < n1)
     {
@@ -113,9 +123,11 @@ unsigned int rbuf_get(ring_buffer_t *ring_buf, unsigned char **data, unsigned in
         max = member_count - head;
     if (max < count)
         count = max;
-    ring_buf->cur = cur + count;
-    if (member_count <= ring_buf->cur)
+    cur += count;
+    if (member_count <= cur)
         ring_buf->cur = 0;
+    else
+        ring_buf->cur = cur;
     *data = buf + (head * ring_buf->member_size);
     return count;
 }

@@ -33,7 +33,7 @@ void log_printf(const char *fmt, ...)
         len = sizeof(buf) - 1;
 
 #ifdef ENABLE_UART_PRINT_DMA
-    rbuf_put(&uart_tx_rb, buf, len);
+    rbuf_put(&uart_tx_rb, buf, len, 0);
     if (HAL_UART_STATE_READY == huart1.gState)
     {
         count = rbuf_get(&uart_tx_rb, &p, uart_tx_rb.member_count);
