@@ -1,4 +1,4 @@
-#include "flash.h"
+#include "stm32_flash.h"
 #include "stm32l4xx_hal.h"
 #include <string.h>
 
@@ -83,7 +83,7 @@ int flash_erase(unsigned int addr, unsigned int len)
     return 0;
 }
 
-int flash_write(unsigned int addr, const unsigned char *data, unsigned int len)
+int flash_write(unsigned int addr, const void *data, unsigned int len)
 {
     unsigned int _len;
     uint64_t d;
@@ -101,14 +101,14 @@ int flash_write(unsigned int addr, const unsigned char *data, unsigned int len)
     HAL_FLASH_Unlock();
     for (i = 0; i < _len; i += 8)
     {
-        dp[0] = data[0];
-        dp[1] = data[1];
-        dp[2] = data[2];
-        dp[3] = data[3];
-        dp[4] = data[4];
-        dp[5] = data[5];
-        dp[6] = data[6];
-        dp[7] = data[7];
+        dp[0] = ((unsigned char *)data)[0];
+        dp[1] = ((unsigned char *)data)[1];
+        dp[2] = ((unsigned char *)data)[2];
+        dp[3] = ((unsigned char *)data)[3];
+        dp[4] = ((unsigned char *)data)[4];
+        dp[5] = ((unsigned char *)data)[5];
+        dp[6] = ((unsigned char *)data)[6];
+        dp[7] = ((unsigned char *)data)[7];
         __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
         if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, d))
         {
@@ -116,7 +116,7 @@ int flash_write(unsigned int addr, const unsigned char *data, unsigned int len)
             return -1;
         }
         addr += 8;
-        data += 8;
+        data = ((unsigned char *)data) + 8;
     }
     if (len <= i)
     {
@@ -128,7 +128,7 @@ int flash_write(unsigned int addr, const unsigned char *data, unsigned int len)
     _len = len & 0x7;
     for (i = 0; i < _len; i++)
     {
-        dp[i] = data[i];
+        dp[i] = ((unsigned char *)data)[i];
     }
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
     if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, d))
@@ -141,7 +141,7 @@ int flash_write(unsigned int addr, const unsigned char *data, unsigned int len)
     return 0;
 }
 
-int flash_read(unsigned int addr, unsigned char *buf, unsigned int len)
+int flash_read(unsigned int addr, void *buf, unsigned int len)
 {
     if (0 == len)
         return 0;
@@ -154,12 +154,12 @@ int flash_read(unsigned int addr, unsigned char *buf, unsigned int len)
     return 0;
 }
 
-int flash_write_otp(const unsigned char *data, unsigned int len)
+int flash_write_otp(const void *data, unsigned int len)
 {
     return flash_write(OTP_ADDR, data, len);
 }
 
-int flash_read_otp(unsigned char *buf, unsigned int len)
+int flash_read_otp(void *buf, unsigned int len)
 {
     if (0 == len)
         return 0;
@@ -170,7 +170,7 @@ int flash_read_otp(unsigned char *buf, unsigned int len)
     return 0;
 }
 
-int flash_program(unsigned int addr, const unsigned char *data, unsigned int len)
+int flash_program(unsigned int addr, const void *data, unsigned int len)
 {
     if (flash_erase(addr, len))
         return -1;
