@@ -52,22 +52,31 @@ static const uint16_t crc16_table_xmodem[] =
 #endif
 };
 
-uint16_t crc16_xmodem(const uint8_t *data, uint32_t len)
+uint16_t crc16_xmodem(uint16_t *prev_crc, const void *data, size_t len)
 {
-    uint16_t crc16 = 0;
+    const uint8_t *p = (uint8_t *)data;
+    uint16_t crc;
+
+    if (prev_crc)
+        crc = *prev_crc;
+    else
+        crc = 0;
+
+    if ((NULL == data) || (0 == len))
+        return crc;
 
     while (len--)
     {
 #ifdef CRC_FAST
-        crc16 = (crc16 << 8) ^ crc16_table_xmodem[(crc16 >> 8) ^ *data++];
+        crc = (crc << 8) ^ crc16_table_xmodem[(crc >> 8) ^ *p++];
 #else
-        crc16 ^= *data++ << 8;
-        crc16 = (crc16 << 4) ^ crc16_table_xmodem[crc16 >> 12];
-        crc16 = (crc16 << 4) ^ crc16_table_xmodem[crc16 >> 12];
+        crc ^= *p++ << 8;
+        crc = (crc << 4) ^ crc16_table_xmodem[crc >> 12];
+        crc = (crc << 4) ^ crc16_table_xmodem[crc >> 12];
 #endif
     }
 
-    return crc16;
+    return crc;
 }
 
 
@@ -117,20 +126,29 @@ static const uint32_t crc32_table_cksum[] =
 #endif
 };
 
-uint32_t crc32_cksum(const uint8_t *data, uint32_t len)
+uint32_t crc32_cksum(uint32_t *prev_crc, const void *data, size_t len)
 {
-    uint32_t crc32 = 0;
+    const uint8_t *p = (uint8_t *)data;
+    uint32_t crc;
+
+    if (prev_crc)
+        crc = (*prev_crc) ^ 0xffffffff;
+    else
+        crc = 0;
+
+    if ((NULL == data) || (0 == len))
+        return crc ^ 0xffffffff;
 
     while (len--)
     {
 #ifdef CRC_FAST
-        crc32 = (crc32 << 8) ^ crc32_table_cksum[(crc32 >> 24) ^ *data++];
+        crc = (crc << 8) ^ crc32_table_cksum[(crc >> 24) ^ *p++];
 #else
-        crc32 ^= *data++ << 24;
-        crc32 = (crc32 << 4) ^ crc32_table_cksum[crc32 >> 28];
-        crc32 = (crc32 << 4) ^ crc32_table_cksum[crc32 >> 28];
+        crc ^= *p++ << 24;
+        crc = (crc << 4) ^ crc32_table_cksum[crc >> 28];
+        crc = (crc << 4) ^ crc32_table_cksum[crc >> 28];
 #endif
     }
 
-    return crc32 ^ 0xffffffff;
+    return crc ^ 0xffffffff;
 }
