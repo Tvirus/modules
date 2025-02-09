@@ -1,7 +1,7 @@
 #include "j1939_service.h"
-#include "uart.h"
-#include "stm32l4xx_hal.h"
+#include "log.h"
 #include <string.h>
+#include "stm32l4xx_hal.h"
 
 
 
@@ -9,7 +9,7 @@
 #define LOGLEVEL_ERROR  1
 #define LOGLEVEL_INFO   2
 #define LOGLEVEL_DEBUG  3
-#define LOG(level, fmt, arg...)  do{if((level) <= j1939_log_level)debug_printf("--J1939-- " fmt, ##arg);}while(0)
+#define LOG(level, fmt, arg...)  do{if((level) <= j1939_log_level)log_printf("--J1939-- " fmt, ##arg);}while(0)
 
 
 #ifndef CAN_MSG_COUNT_MAX
@@ -204,13 +204,13 @@ int j1939_send_msg(const j1939_msg_header_t *header, const unsigned char *data, 
             continue;
         if (HAL_OK != HAL_CAN_AddTxMessage(&hcan1, &can_header, data, &mail_box))
         {
-            LOG(LOGLEVEL_ERROR, "send msg failed: [%02X->%02X] PGN:%06x, len:%u\n", header->src_addr, header->dst_addr, header->pgn, len);
+            LOG(LOGLEVEL_ERROR, "send msg failed: [%02X->%02X] PGN:%06x, len:%u !\n", header->src_addr, header->dst_addr, header->pgn, len);
             return -1;
         }
         return 0;
     }
 
-    LOG(LOGLEVEL_ERROR, "send msg timeout: [%02X->%02X] PGN:%06x, len:%u\n", header->src_addr, header->dst_addr, header->pgn, len);
+    LOG(LOGLEVEL_ERROR, "send msg timeout: [%02X->%02X] PGN:%06x, len:%u !\n", header->src_addr, header->dst_addr, header->pgn, len);
     return -1;
 }
 
@@ -257,7 +257,7 @@ int j1939_send_ackm(const j1939_msg_header_t *header, unsigned char ack, unsigne
     ackm.pgn[0] = header->pgn & 0xff;
     ackm.pgn[1] = (header->pgn >> 8) & 0xff;
     ackm.pgn[2] = (header->pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send ackm: [%02X->%02X] PGN:%06x, ack:%u group:%02x ori:%20x\n",
+    LOG(LOGLEVEL_INFO, "send ackm: [%02X->%02X] PGN:%06x, ack:%u group:%02x ori:%02x\n",
         header->src_addr, header->dst_addr, header->pgn, ack, group_fun, ori_addr);
     return j1939_send_msg(&_header, (unsigned char *)&ackm, sizeof(ackm));
 }
@@ -368,7 +368,8 @@ int j1939_send_tpdt(unsigned char dst, unsigned char src, unsigned char seq, con
 
     tpdt.seq_num = seq;
     memcpy(tpdt.data, data, len);
-    memset(&tpdt.data[len], 0xff, 7 - len);
+    if (7 > len)
+        memset(&tpdt.data[len], 0xff, 7 - len);
     LOG(LOGLEVEL_INFO, "send tpdt: [%02X->%02X], seq:%u len:%u\n", src, dst, seq, len);
     return j1939_send_msg(&header, (unsigned char *)&tpdt, sizeof(tpdt));
 }
@@ -388,19 +389,19 @@ int j1939_create_large_msg_sending(const j1939_msg_header_t *header, unsigned ch
         j1939_large_msg_tx_list[i].header = *header;
         j1939_large_msg_tx_list[i].header.priority = header->priority & 0x07;
         j1939_large_msg_tx_list[i].header.ext_data_page = !!header->ext_data_page;
-        j1939_large_msg_tx_list[i].data = data;
         j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_WAIT_RTS;
         j1939_large_msg_tx_list[i].total_packets = (len + 6) / 7;
         j1939_large_msg_tx_list[i].cur_packets = 0;
         j1939_large_msg_tx_list[i].total_bytes = len;
         j1939_large_msg_tx_list[i].interval = interval;
         j1939_large_msg_tx_list[i].ts = 0;
+        j1939_large_msg_tx_list[i].data = data;
 
-        LOG(LOGLEVEL_INFO, "create large sending: [%02X->%02X] PGN:%06x, len:%u\n", header->src_addr, header->dst_addr, header->pgn, len);
+        LOG(LOGLEVEL_INFO, "create large msg sending: [%02X->%02X] PGN:%06x, size:%u\n", header->src_addr, header->dst_addr, header->pgn, len);
         return i;
     }
 
-    LOG(LOGLEVEL_ERROR, "create large sending failed: [%02X->%02X] PGN:%06x, len:%u\n", header->src_addr, header->dst_addr, header->pgn, len);
+    LOG(LOGLEVEL_ERROR, "create large msg sending failed: [%02X->%02X] PGN:%06x, size:%u !\n", header->src_addr, header->dst_addr, header->pgn, len);
     return -1;
 }
 int j1939_destroy_large_msg_sending(int handle)
@@ -478,7 +479,7 @@ static void handle_tpdt(const j1939_msg_header_t *header, unsigned char *data, u
         buf           = j1939_large_msg_cb_list[i].buf;
         if (cur_packets != tpdt->seq_num)
         {
-            LOG(LOGLEVEL_ERROR, "recv large msg error: [%02X->%02X] PGN:%06x, seq:%u expact_seq:%u\n",
+            LOG(LOGLEVEL_ERROR, "recv large msg error: [%02X->%02X] PGN:%06x, seq:%u expact_seq:%u !\n",
                 header->src_addr, header->dst_addr, j1939_large_msg_cb_list[i].header.pgn, tpdt->seq_num, cur_packets);
             continue;
         }
@@ -494,7 +495,7 @@ static void handle_tpdt(const j1939_msg_header_t *header, unsigned char *data, u
         else if (cur_packets == total_packets)
         {
             memcpy(&buf[cur_bytes], tpdt->data, total_bytes - cur_bytes);
-            LOG(LOGLEVEL_INFO, "recv large msg OK: [%02X->%02X] PGN:%06x, bytes:%u packets:%u\n",
+            LOG(LOGLEVEL_INFO, "recv large msg OK: [%02X->%02X] PGN:%06x, size:%u packets:%u\n",
                 header->src_addr, header->dst_addr, j1939_large_msg_cb_list[i].header.pgn, total_bytes, total_packets);
             j1939_send_tpcm_ack(j1939_large_msg_cb_list[i].header.pgn,
                                 j1939_large_msg_cb_list[i].header.src_addr,
@@ -545,7 +546,7 @@ static void handle_tpcm_rts(const j1939_msg_header_t *header, unsigned char *dat
         }
         if (j1939_large_msg_cb_list[i].buf_size < total_bytes)
         {
-            LOG(LOGLEVEL_INFO, "recv tpcm_rts [%02X->%02X] PGN:%06x, total size(%u) exceed cb buf size(%u)\n",
+            LOG(LOGLEVEL_ERROR, "recv tpcm_rts [%02X->%02X] PGN:%06x, total size(%u) exceeds cb buf size(%u) !\n",
                 header->src_addr, header->dst_addr, pgn, total_bytes, j1939_large_msg_cb_list[i].buf_size);
             j1939_large_msg_cb_list[i].start = 0;
             continue;
@@ -773,6 +774,8 @@ void j1939_task(void)
             if (J1939_TP_TIME_T3 > ((unsigned int)(HAL_GetTick() - j1939_large_msg_tx_list[i].ts)))
                 continue;
 
+            LOG(LOGLEVEL_ERROR, "send large msg timeout: [%02X->%02X] PGN:%06x, size:%u state:%u !\n",
+                src, dst, pgn, j1939_large_msg_tx_list[i].total_bytes, state);
             j1939_send_tpcm_abort(pgn, dst, src, J1939_TPCM_ABORT_REASON_TIMEOUT, J1939_TPCM_ABORT_ROLE_ORI);
             j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_TIMEOUT;
         }
