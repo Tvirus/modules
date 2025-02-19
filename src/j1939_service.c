@@ -25,6 +25,10 @@
 #define J1939_LARGE_MSG_TX_MAX   8
 #endif
 
+#ifndef J1939_TASK_PERIOD
+#define J1939_TASK_PERIOD  5
+#endif
+
 
 typedef struct
 {
@@ -193,9 +197,8 @@ int j1939_send_msg(const j1939_msg_header_t *header, const unsigned char *data, 
     can_header.RTR = CAN_RTR_DATA;
     can_header.DLC = len;
 
-    LOG(LOGLEVEL_DEBUG, "send can msg: [%02X->%02X] PGN:%06x extid:%x, len:%u data:%02x %02x %02x %02x %02x %02x %02x %02x\n",
-                         header->src_addr, header->dst_addr, header->pgn, can_header.ExtId, len,
-                         data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+    LOG(LOGLEVEL_DEBUG, "send can msg: [%02X->%02X] PGN:%06x extid:%x, len:%u\n",
+                         header->src_addr, header->dst_addr, header->pgn, can_header.ExtId, len);
 
     /* 发送邮箱需要配置为fifo模式! */
     for (i = 0; i < 500; i++)
@@ -672,7 +675,6 @@ static void handle_tpcm_abort(const j1939_msg_header_t *header, unsigned char *d
 }
 
 
-#define J1939_TASK_PERIOD  5  /* ms */
 void j1939_task(void)
 {
     static unsigned int last_ts = 0;
@@ -781,9 +783,20 @@ void j1939_task(void)
         }
         else if (J1939_LARGE_MSG_TX_STATE_SENDING == state)
         {
+            if (0 == j1939_large_msg_tx_list[i].interval)
+            {
+                for (; cur_packets < total_packets - 1; cur_packets++)
+                {
+                    j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7], 7);
+                }
+                j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7],
+                                j1939_large_msg_tx_list[i].total_bytes - cur_packets * 7);
+                j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_WAIT_ACK;
+                continue;
+            }
+
             if (j1939_large_msg_tx_list[i].interval > ((unsigned int)(HAL_GetTick() - j1939_large_msg_tx_list[i].ts)))
                 continue;
-
             if (cur_packets < total_packets - 1)
             {
                 j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7], 7);
