@@ -72,7 +72,7 @@ typedef struct
 typedef struct
 {
     j1939_msg_header_t header;
-    unsigned char *data;  /* 同时用来标记已用 */
+    const unsigned char *data;  /* 同时用来标记已用 */
     unsigned char state;
     unsigned char rsv;
     unsigned char total_packets;
@@ -120,7 +120,7 @@ int j1939_register_msg_cb(const j1939_msg_header_t *header, j1939_msg_cb_t cb)
     return -1;
 }
 
-int j1939_register_large_msg_cb(const j1939_msg_header_t *header, unsigned char *buf, unsigned int size, j1939_msg_cb_t cb)
+int j1939_register_large_msg_cb(const j1939_msg_header_t *header, void *buf, unsigned int size, j1939_msg_cb_t cb)
 {
     int i;
 
@@ -169,7 +169,7 @@ int j1939_recv_can_msg(const can_msg_t *msg)
 }
 
 extern CAN_HandleTypeDef hcan1;
-int j1939_send_msg(const j1939_msg_header_t *header, const unsigned char *data, unsigned char len)
+int j1939_send_msg(const j1939_msg_header_t *header, const void *data, unsigned char len)
 {
     unsigned char pdu_buf[4];
     j1939_pdu_t *pdu = (j1939_pdu_t *)pdu_buf;
@@ -377,7 +377,7 @@ int j1939_send_tpdt(unsigned char dst, unsigned char src, unsigned char seq, con
     return j1939_send_msg(&header, (unsigned char *)&tpdt, sizeof(tpdt));
 }
 
-int j1939_create_large_msg_sending(const j1939_msg_header_t *header, unsigned char *data, unsigned int len, unsigned int interval)
+int j1939_create_large_msg_sending(const j1939_msg_header_t *header, const void *data, unsigned int len, unsigned int interval)
 {
     int i;
 

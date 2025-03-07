@@ -150,12 +150,12 @@ typedef int (*j1939_msg_cb_t)(const j1939_msg_header_t *header, const unsigned c
 
 extern void j1939_task(void);
 extern int j1939_recv_can_msg(const can_msg_t *msg);
-extern int j1939_send_msg(const j1939_msg_header_t *header, const unsigned char *data, unsigned char len);
+extern int j1939_send_msg(const j1939_msg_header_t *header, const void *data, unsigned char len);
 extern int j1939_send_rqst(const j1939_msg_header_t *header);
 extern int j1939_send_ackm(const j1939_msg_header_t *header, unsigned char ack, unsigned char group_fun, unsigned char ori_addr);
 extern int j1939_register_msg_cb(const j1939_msg_header_t *header, j1939_msg_cb_t cb);
-extern int j1939_register_large_msg_cb(const j1939_msg_header_t *header, unsigned char *buf, unsigned int size, j1939_msg_cb_t cb);
-extern int j1939_create_large_msg_sending(const j1939_msg_header_t *header, unsigned char *data, unsigned int len, unsigned int interval);
+extern int j1939_register_large_msg_cb(const j1939_msg_header_t *header, void *buf, unsigned int size, j1939_msg_cb_t cb);
+extern int j1939_create_large_msg_sending(const j1939_msg_header_t *header, const void *data, unsigned int len, unsigned int interval);
 extern int j1939_destroy_large_msg_sending(int handle);
 
 #define J1939_LARGE_MSG_TX_STATE_WAIT_RTS    0
