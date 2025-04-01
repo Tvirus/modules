@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/statfs.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/prctl.h>
@@ -26,12 +27,6 @@
             printf("--DiskM-- " fmt "\n", ##arg); \
     }while(0)
 
-#ifndef DISKM_DEV_NAME_MAX
-#define DISKM_DEV_NAME_MAX  32
-#endif
-#ifndef DISKM_MOUNT_POINT_MAX
-#define DISKM_MOUNT_POINT_MAX  64
-#endif
 #ifndef DISKM_CB_MAX
 #define DISKM_CB_MAX  8
 #endif
@@ -41,9 +36,9 @@
 
 typedef struct
 {
-    char dev_name[DISKM_DEV_NAME_MAX];
-    char mount_point[DISKM_MOUNT_POINT_MAX];
     diskm_cb_t cb;  /* 同时用来标记是否已用 */
+    char dev_name[DISKM_DEV_NAME_MAX];
+    fs_info_t fs_info;
     unsigned char dev_added;
     unsigned char mounted;
     unsigned char mount_err;
@@ -62,12 +57,33 @@ static diskm_cb_info_t cb_info_list[DISKM_CB_MAX] = {0};
 
 
 
-static int is_mounted(const char *dev_name, char *mount_point)
+
+static void print_uevent(const unsigned char *uevent, unsigned int uevent_len)
+{
+    char *p;
+    const unsigned char *end = uevent + uevent_len - 1;
+
+    if ((NULL == uevent) || (0 == uevent_len))
+        return;
+
+    printf("\n--------------------------------\n");
+    printf("%s\n", uevent);
+
+    while (uevent < end)
+    {
+        if (0 != *uevent++)
+            continue;
+        printf("%s\n", uevent);
+    }
+}
+
+static int is_mounted(const char *dev_name, fs_info_t *fs_info)
 {
     FILE *fp = NULL;
     char buf[200];
     char *p;
     char *end;
+    struct statfs _statfs;
     int mounted = 0;
 
     fp = fopen("/proc/mounts", "rt");
@@ -82,19 +98,48 @@ static int is_mounted(const char *dev_name, char *mount_point)
         if (NULL == fgets(buf, sizeof(buf), fp))
             break;
 
-        p = strchr(buf, ' ');
-        if (NULL == p)
-            continue;
-        *p++ = 0;
-        if (NULL == strstr(buf, dev_name))
-            continue;
-
+        /* dev */
+        p = buf;
         end = strchr(p, ' ');
         if (NULL == end)
             continue;
         *end = 0;
+        if (NULL == strstr(p, dev_name))
+            continue;
 
-        strncpy(mount_point, p, DISKM_MOUNT_POINT_MAX);
+        /* mount point */
+        p = end + 1;
+        end = strchr(p, ' ');
+        if (NULL == end)
+            continue;
+        *end = 0;
+        strncpy(fs_info->mount_point, p, DISKM_MOUNT_POINT_MAX);
+
+        /* fs type */
+        p = end + 1;
+        end = strchr(p, ' ');
+        if (end)
+        {
+            *end = 0;
+            strncpy(fs_info->type, p, DISKM_FSTYPE_MAX);
+        }
+        else
+        {
+            LOG(LOGLEVEL_ERROR, "get \"%s\" fs type failed: %s !", dev_name);
+            fs_info->type[0] = 0;
+        }
+
+        /* size */
+        if (statfs(fs_info->mount_point, &_statfs))
+        {
+            LOG(LOGLEVEL_ERROR, "get \"%s\" fs info failed: %s !", dev_name, strerror(errno));
+            fs_info->size = 0;
+        }
+        else
+        {
+            fs_info->size = ((uint64_t)_statfs.f_bsize) * ((uint64_t)_statfs.f_blocks);
+        }
+
         mounted = 1;
         break;
     }
@@ -103,10 +148,10 @@ static int is_mounted(const char *dev_name, char *mount_point)
     return mounted;
 }
 
-static char* uevent_search(unsigned char *uevent, unsigned int uevent_len, const char *str)
+static char* uevent_search(const unsigned char *uevent, unsigned int uevent_len, const char *str)
 {
     char *p;
-    unsigned char *end = uevent + uevent_len - 1;
+    const unsigned char *end = uevent + uevent_len - 1;
 
     if ((NULL == uevent) || (0 == uevent_len))
         return NULL;
@@ -232,13 +277,13 @@ static void* monitor(void *arg)
                 clock_gettime(CLOCK_MONOTONIC, &ts);
                 if ((1 == cb_info->check_ts) || (DISKM_MOUNT_TIMEOUT > (((unsigned long)ts.tv_sec) - cb_info->check_ts)))
                 {
-                    if (is_mounted(cb_info->dev_name, cb_info->mount_point))
+                    if (is_mounted(cb_info->dev_name, &cb_info->fs_info))
                     {
                         cb_info->dev_added = 1;
                         cb_info->mounted = 1;
                         cb_info->mount_err = 0;
                         cb_info->check_ts = 0;
-                        cb_info->cb(cb_info->dev_name, cb_info->mount_point, DISKM_EVENT_MOUNT);
+                        cb_info->cb(cb_info->dev_name, &cb_info->fs_info, DISKM_EVENT_MOUNT);
                     }
                     else if (1 == cb_info->check_ts)
                         cb_info->check_ts = (unsigned long)ts.tv_sec;
@@ -275,6 +320,8 @@ static void* monitor(void *arg)
             continue;
         }
         uevent_buf[uevent_len - 1] = 0;
+        if (LOGLEVEL_DEBUG <= diskm_debug)
+            print_uevent(uevent_buf, uevent_len);
 
         if (NULL == uevent_search(uevent_buf, uevent_len, "SUBSYSTEM=block"))
             continue;
@@ -285,12 +332,12 @@ static void* monitor(void *arg)
             continue;
         if (uevent_search(uevent_buf, uevent_len, "ACTION=add"))
         {
-            LOG(LOGLEVEL_INFO, "add dev: %s", value);
+            LOG(LOGLEVEL_INFO, "add dev: \"%s\"", value);
             set_dev(value, 1);
         }
         else if (uevent_search(uevent_buf, uevent_len, "ACTION=remove"))
         {
-            LOG(LOGLEVEL_INFO, "remove dev: %s", value);
+            LOG(LOGLEVEL_INFO, "remove dev: \"%s\"", value);
             set_dev(value, 0);
         }
     }
