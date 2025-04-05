@@ -60,7 +60,6 @@ static diskm_cb_info_t cb_info_list[DISKM_CB_MAX] = {0};
 
 static void print_uevent(const unsigned char *uevent, unsigned int uevent_len)
 {
-    char *p;
     const unsigned char *end = uevent + uevent_len - 1;
 
     if ((NULL == uevent) || (0 == uevent_len))
@@ -125,7 +124,7 @@ static int is_mounted(const char *dev_name, fs_info_t *fs_info)
         }
         else
         {
-            LOG(LOGLEVEL_ERROR, "get \"%s\" fs type failed: %s !", dev_name);
+            LOG(LOGLEVEL_ERROR, "get \"%s\" fs type failed !", dev_name);
             fs_info->type[0] = 0;
         }
 
@@ -156,7 +155,7 @@ static char* uevent_search(const unsigned char *uevent, unsigned int uevent_len,
     if ((NULL == uevent) || (0 == uevent_len))
         return NULL;
 
-    p = strstr(uevent, str);
+    p = strstr((char *)uevent, str);
     if (p)
         return p;
 
@@ -165,7 +164,7 @@ static char* uevent_search(const unsigned char *uevent, unsigned int uevent_len,
         if (0 != *uevent++)
             continue;
 
-        p = strstr(uevent, str);
+        p = strstr((char *)uevent, str);
         if (p)
             return p;
     }
@@ -217,7 +216,7 @@ static void* monitor(void *arg)
     struct timeval timeout;
     int ret;
     ssize_t uevent_len;
-    char uevent_buf[1000];
+    unsigned char uevent_buf[1000];
     char dev_name[5 + DISKM_DEV_NAME_MAX];
     struct timespec ts;
     char *value;
