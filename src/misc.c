@@ -113,7 +113,6 @@ int get_by_cmd(char *buf, int len, const char *fmt, ...)
     FILE *fp;
     size_t ret;
 
-
     if ((NULL == buf) || (2 > len) || (NULL == fmt))
         return -1;
 
@@ -130,4 +129,50 @@ int get_by_cmd(char *buf, int len, const char *fmt, ...)
     buf[ret] = 0;
 
     return (int)ret;
+}
+
+unsigned int get_line_by_cmd(char *buf, unsigned int len, const char *fmt, ...)
+{
+    va_list args;
+    char cmd[300];
+    FILE *fp;
+    int _len;
+
+
+    if ((NULL == buf) || (2 > len) || (NULL == fmt))
+        return -1;
+
+    va_start(args, fmt);
+    _len = vsnprintf(cmd, sizeof(cmd), fmt, args);
+    if (0 > _len)
+    {
+        printf("vsnprintf err: %s !", strerror(errno));
+        buf[0] = 0;
+        return 0;
+    }
+    if (sizeof(cmd) <= _len)
+    {
+        printf("cmd len(%d) exceeds the buf len(%zu) !", _len, sizeof(cmd));
+        buf[0] = 0;
+        return 0;
+    }
+
+    fp = popen(cmd, "r");
+    if (!fp)
+    {
+        printf("popen failed, cmd: %s, err: %s !", cmd, strerror(errno));
+        buf[0] = 0;
+        return 0;
+    }
+
+    if (NULL == fgets(buf, len, fp))
+    {
+        printf("fgets err: %s !", strerror(errno));
+        pclose(fp);
+        buf[0] = 0;
+        return 0;
+    }
+
+    pclose(fp);
+    return (unsigned int)strlen(buf);
 }
