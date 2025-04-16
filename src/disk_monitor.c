@@ -18,14 +18,14 @@
 #define LOGLEVEL_INFO   2
 #define LOGLEVEL_DEBUG  3
 #define LOG(level, fmt, arg...) \
-    do{ \
+    do { \
         if (diskm_debug < level) \
             break; \
         if (LOGLEVEL_ERROR == level) \
             printf("\e[1;31m--DiskM-- " fmt "\e[0m\n", ##arg); \
         else \
             printf("--DiskM-- " fmt "\n", ##arg); \
-    }while(0)
+    } while(0)
 
 #ifndef DISKM_CB_MAX
 #define DISKM_CB_MAX  8
@@ -40,8 +40,8 @@ typedef struct
     char dev_name[DISKM_DEV_NAME_MAX];
     fs_info_t fs_info;
     unsigned char dev_added;
-    unsigned char mounted;
-    unsigned char mount_err;
+    unsigned char mounted;  /* 0:未挂载 1:已挂载 2:挂载失败*/
+    unsigned char force_unmount;
     unsigned char initial_check;
     unsigned long check_ts;
 } diskm_cb_info_t;
@@ -181,30 +181,28 @@ static void set_dev(const char *dev_name, unsigned char add)
     {
         cb_info = &cb_info_list[i];
 
-        if (NULL == cb_info->cb)
-            continue;
-        if (strcmp(cb_info->dev_name, dev_name))
+        if ((NULL == cb_info->cb) || strcmp(cb_info->dev_name, dev_name))
             continue;
 
-        cb_info->mount_err = 0;
         cb_info->initial_check = 0;
         if (add)
         {
             cb_info->dev_added = 1;
             cb_info->mounted = 0;
             cb_info->check_ts = 1;
-            cb_info->cb(cb_info->dev_name, NULL, DISKM_EVENT_ADD);
+            cb_info->cb(cb_info->dev_name, DISKM_EVENT_ADD, NULL);
         }
         else
         {
             cb_info->dev_added = 0;
-            if (cb_info->mounted)
+            if (1 == cb_info->mounted)
             {
                 cb_info->mounted = 0;
-                cb_info->cb(cb_info->dev_name, NULL, DISKM_EVENT_UNMOUNT);
+                cb_info->cb(cb_info->dev_name, DISKM_EVENT_UNMOUNT, NULL);
             }
+            cb_info->mounted = 0;
             cb_info->check_ts = 0;
-            cb_info->cb(cb_info->dev_name, NULL, DISKM_EVENT_REMOVE);
+            cb_info->cb(cb_info->dev_name, DISKM_EVENT_REMOVE, NULL);
         }
     }
 }
@@ -245,6 +243,7 @@ static void* monitor(void *arg)
 
     while (should_run)
     {
+        pthread_mutex_lock(&diskm_mutex);
         for (i = 0; i < DISKM_CB_MAX; i++)
         {
             if (NULL == cb_info_list[i].cb)
@@ -259,9 +258,8 @@ static void* monitor(void *arg)
                     cb_info->initial_check = 0;
                     cb_info->dev_added = 1;
                     cb_info->mounted = 0;
-                    cb_info->mount_err = 0;
                     cb_info->check_ts = 1;
-                    cb_info->cb(cb_info->dev_name, NULL, DISKM_EVENT_ADD);
+                    cb_info->cb(cb_info->dev_name, DISKM_EVENT_ADD, NULL);
                 }
                 else
                 {
@@ -271,31 +269,45 @@ static void* monitor(void *arg)
                     cb_info->check_ts = 0;
                 }
             }
-            if (cb_info->check_ts)
+
+            if (cb_info->force_unmount || (0 == cb_info->check_ts))
+                continue;
+
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            if ((1 == cb_info->check_ts) || (DISKM_MOUNT_TIMEOUT > (((unsigned long)ts.tv_sec) - cb_info->check_ts)))
             {
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                if ((1 == cb_info->check_ts) || (DISKM_MOUNT_TIMEOUT > (((unsigned long)ts.tv_sec) - cb_info->check_ts)))
+                if (is_mounted(cb_info->dev_name, &cb_info->fs_info))
                 {
-                    if (is_mounted(cb_info->dev_name, &cb_info->fs_info))
+                    cb_info->dev_added = 1;
+                    cb_info->check_ts = 0;
+                    if (1 != cb_info->mounted)
                     {
-                        cb_info->dev_added = 1;
                         cb_info->mounted = 1;
-                        cb_info->mount_err = 0;
-                        cb_info->check_ts = 0;
-                        cb_info->cb(cb_info->dev_name, &cb_info->fs_info, DISKM_EVENT_MOUNT);
+                        cb_info->cb(cb_info->dev_name, DISKM_EVENT_MOUNT, &cb_info->fs_info);
                     }
-                    else if (1 == cb_info->check_ts)
-                        cb_info->check_ts = (unsigned long)ts.tv_sec;
                 }
                 else
                 {
-                    cb_info->mounted = 0;
-                    cb_info->mount_err = 1;
-                    cb_info->check_ts = 0;
-                    cb_info->cb(cb_info->dev_name, NULL, DISKM_EVENT_MOUNT_ERR);
+                    if (1 == cb_info->mounted)
+                    {
+                        cb_info->mounted = 0;
+                        cb_info->cb(cb_info->dev_name, DISKM_EVENT_UNMOUNT, NULL);
+                    }
+                    if (1 == cb_info->check_ts)
+                        cb_info->check_ts = (unsigned long)ts.tv_sec;
+                }
+            }
+            else
+            {
+                cb_info->check_ts = 0;
+                if (2 != cb_info->mounted)
+                {
+                    cb_info->mounted = 2;
+                    cb_info->cb(cb_info->dev_name, DISKM_EVENT_MOUNT_ERR, NULL);
                 }
             }
         }
+        pthread_mutex_unlock(&diskm_mutex);
 
         FD_ZERO(&fds);
         FD_SET(fd, &fds);
@@ -332,12 +344,16 @@ static void* monitor(void *arg)
         if (uevent_search(uevent_buf, uevent_len, "ACTION=add"))
         {
             LOG(LOGLEVEL_INFO, "add dev: \"%s\"", value);
+            pthread_mutex_lock(&diskm_mutex);
             set_dev(value, 1);
+            pthread_mutex_unlock(&diskm_mutex);
         }
         else if (uevent_search(uevent_buf, uevent_len, "ACTION=remove"))
         {
             LOG(LOGLEVEL_INFO, "remove dev: \"%s\"", value);
+            pthread_mutex_lock(&diskm_mutex);
             set_dev(value, 0);
+            pthread_mutex_unlock(&diskm_mutex);
         }
     }
 
@@ -423,7 +439,7 @@ int diskm_register_cb(const char *dev_name, diskm_cb_t cb)
         memcpy(cb_info_list[i].dev_name, dev_name, dev_len + 1);
         cb_info_list[i].dev_added = 0;
         cb_info_list[i].mounted = 0;
-        cb_info_list[i].mount_err = 0;
+        cb_info_list[i].force_unmount = 0;
         cb_info_list[i].initial_check = 4;
         cb_info_list[i].check_ts = 0;
         cb_info_list[i].cb = cb;
@@ -437,5 +453,52 @@ int diskm_register_cb(const char *dev_name, diskm_cb_t cb)
     }
 
     pthread_mutex_unlock(&diskm_mutex);
+    return 0;
+}
+
+int diskm_force_unmount(const char *dev_name)
+{
+    int i;
+
+    if (NULL == dev_name)
+        return -1;
+
+    pthread_mutex_lock(&diskm_mutex);
+    for (i = 0; i < DISKM_CB_MAX; i++)
+    {
+        if ((NULL == cb_info_list[i].cb) || strcmp(cb_info_list[i].dev_name, dev_name))
+            continue;
+
+        cb_info_list[i].force_unmount = 1;
+        if (1 == cb_info_list[i].mounted)
+        {
+            cb_info_list[i].mounted = 0;
+            cb_info_list[i].cb(cb_info_list[i].dev_name, DISKM_EVENT_UNMOUNT, NULL);
+        }
+    }
+    pthread_mutex_unlock(&diskm_mutex);
+
+    return 0;
+}
+
+int diskm_recheck(const char *dev_name)
+{
+    int i;
+
+    if (NULL == dev_name)
+        return -1;
+
+    pthread_mutex_lock(&diskm_mutex);
+    for (i = 0; i < DISKM_CB_MAX; i++)
+    {
+        if ((NULL == cb_info_list[i].cb) || strcmp(cb_info_list[i].dev_name, dev_name))
+            continue;
+
+        cb_info_list[i].force_unmount = 0;
+        if (cb_info_list[i].dev_added)
+            cb_info_list[i].check_ts = 1;
+    }
+    pthread_mutex_unlock(&diskm_mutex);
+
     return 0;
 }

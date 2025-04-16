@@ -27,11 +27,15 @@ typedef struct
     char type[DISKM_FSTYPE_MAX];
     uint64_t size;
 } fs_info_t;
-typedef void (*diskm_cb_t)(const char *dev_name, const fs_info_t *fs_info, unsigned int event);
+typedef void (*diskm_cb_t)(const char *dev_name, unsigned int event, const fs_info_t *fs_info);
 
+/* 不能在回调中调用 */
 extern int diskm_init(void);
 extern int diskm_exit(void);
 extern int diskm_register_cb(const char *dev_name, diskm_cb_t cb);
+
+extern int diskm_force_unmount(const char *dev_name);
+extern int diskm_recheck(const char *dev_name);
 
 
 #endif
