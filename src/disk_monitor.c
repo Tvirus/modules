@@ -40,9 +40,9 @@ typedef struct
     char dev_name[DISKM_DEV_NAME_MAX];
     fs_info_t fs_info;
     unsigned char dev_added;
+    unsigned char initial_check;
     unsigned char mounted;  /* 0:未挂载 1:已挂载 2:挂载失败*/
     unsigned char force_unmount;
-    unsigned char initial_check;
     unsigned long check_ts;
 } diskm_cb_info_t;
 
@@ -70,7 +70,7 @@ static void print_uevent(const unsigned char *uevent, unsigned int uevent_len)
 
     while (uevent < end)
     {
-        if (0 != *uevent++)
+        if (*uevent++)
             continue;
         printf("%s\n", uevent);
     }
@@ -161,7 +161,7 @@ static char* uevent_search(const unsigned char *uevent, unsigned int uevent_len,
 
     while (uevent < end)
     {
-        if (0 != *uevent++)
+        if (*uevent++)
             continue;
 
         p = strstr((char *)uevent, str);
@@ -187,10 +187,13 @@ static void set_dev(const char *dev_name, unsigned char add)
         cb_info->initial_check = 0;
         if (add)
         {
-            cb_info->dev_added = 1;
             cb_info->mounted = 0;
             cb_info->check_ts = 1;
-            cb_info->cb(cb_info->dev_name, DISKM_EVENT_ADD, NULL);
+            if (!cb_info->dev_added)
+            {
+                cb_info->dev_added = 1;
+                cb_info->cb(cb_info->dev_name, DISKM_EVENT_ADD, NULL);
+            }
         }
         else
         {
@@ -326,10 +329,8 @@ static void* monitor(void *arg)
         }
         uevent_len = recv(fd, uevent_buf, sizeof(uevent_buf), 0);
         if (0 >= uevent_len)
-        {
-            sleep(1);
             continue;
-        }
+
         uevent_buf[uevent_len - 1] = 0;
         if (LOGLEVEL_DEBUG <= diskm_debug)
             print_uevent(uevent_buf, uevent_len);
@@ -337,10 +338,9 @@ static void* monitor(void *arg)
         if (NULL == uevent_search(uevent_buf, uevent_len, "SUBSYSTEM=block"))
             continue;
         value = uevent_search(uevent_buf, uevent_len, "DEVNAME=");
-        if (value)
-            value += sizeof("DEVNAME=") - 1;
-        else
+        if (NULL == value)
             continue;
+        value += sizeof("DEVNAME=") - 1;
         if (uevent_search(uevent_buf, uevent_len, "ACTION=add"))
         {
             LOG(LOGLEVEL_INFO, "add dev: \"%s\"", value);
@@ -389,7 +389,7 @@ int diskm_exit(void)
     int i;
 
     pthread_mutex_lock(&diskm_mutex);
-    if (0 == diskm_inited)
+    if (!diskm_inited)
     {
         pthread_mutex_unlock(&diskm_mutex);
         return 0;
@@ -425,7 +425,7 @@ int diskm_register_cb(const char *dev_name, diskm_cb_t cb)
     dev_len = strnlen(dev_name, DISKM_DEV_NAME_MAX);
     if (DISKM_DEV_NAME_MAX <= dev_len)
     {
-        LOG(LOGLEVEL_ERROR, "dev_len exceeds the max(%u) !", DISKM_DEV_NAME_MAX);
+        LOG(LOGLEVEL_ERROR, "dev len exceeds the max(%u) !", DISKM_DEV_NAME_MAX);
         return -1;
     }
 
@@ -438,9 +438,9 @@ int diskm_register_cb(const char *dev_name, diskm_cb_t cb)
 
         memcpy(cb_info_list[i].dev_name, dev_name, dev_len + 1);
         cb_info_list[i].dev_added = 0;
+        cb_info_list[i].initial_check = 4;
         cb_info_list[i].mounted = 0;
         cb_info_list[i].force_unmount = 0;
-        cb_info_list[i].initial_check = 4;
         cb_info_list[i].check_ts = 0;
         cb_info_list[i].cb = cb;
         break;
@@ -462,6 +462,8 @@ int diskm_force_unmount(const char *dev_name)
 
     if (NULL == dev_name)
         return -1;
+
+    LOG(LOGLEVEL_INFO, "force unmount dev: \"%s\"", dev_name);
 
     pthread_mutex_lock(&diskm_mutex);
     for (i = 0; i < DISKM_CB_MAX; i++)
@@ -487,6 +489,8 @@ int diskm_recheck(const char *dev_name)
 
     if (NULL == dev_name)
         return -1;
+
+    LOG(LOGLEVEL_INFO, "recheck dev: \"%s\"", dev_name);
 
     pthread_mutex_lock(&diskm_mutex);
     for (i = 0; i < DISKM_CB_MAX; i++)
