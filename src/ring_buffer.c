@@ -2,12 +2,12 @@
 #include <string.h>
 
 
-int rbuf_init(ring_buffer_t *ring_buf, unsigned char *buf, unsigned int buf_size, unsigned int member_size)
+int rbuf_init(ring_buffer_t *ring_buf, void *buf, unsigned int buf_size, unsigned int member_size)
 {
     if ((NULL == ring_buf) || (NULL == buf) || (0 >= buf_size) || (0 >= member_size))
         return -1;
 
-    ring_buf->buf = buf;
+    ring_buf->buf = (unsigned char *)buf;
     ring_buf->buf_size = buf_size;
     ring_buf->member_size = member_size;
     ring_buf->member_count = buf_size / member_size;
@@ -20,7 +20,7 @@ int rbuf_init(ring_buffer_t *ring_buf, unsigned char *buf, unsigned int buf_size
     return 0;
 }
 
-unsigned int rbuf_put(ring_buffer_t *ring_buf, const unsigned char *data, unsigned int count, unsigned char full_mode)
+unsigned int rbuf_put(ring_buffer_t *ring_buf, const void *data, unsigned int count, unsigned char full_mode)
 {
     unsigned char *buf;
     unsigned int member_size;
@@ -79,7 +79,7 @@ unsigned int rbuf_put(ring_buffer_t *ring_buf, const unsigned char *data, unsign
     }
 
     memcpy(buf + (tail * member_size), data, n1 * member_size);
-    memcpy(buf, data + n1 * member_size, (count - n1) * member_size);
+    memcpy(buf, ((unsigned char *)data) + n1 * member_size, (count - n1) * member_size);
     ring_buf->tail = tail + count - member_count;
     return count;
 }
