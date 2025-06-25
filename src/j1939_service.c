@@ -756,7 +756,7 @@ void j1939_task(void)
             {
                 if (   (dst == j1939_large_msg_tx_list[j].header.dst_addr)
                     && (src == j1939_large_msg_tx_list[j].header.src_addr)
-                    && (J1939_LARGE_MSG_TX_STARTED(state)))
+                    && J1939_LARGE_MSG_TX_STARTED(j1939_large_msg_tx_list[j].state))
                     break;
             }
             if (J1939_LARGE_MSG_TX_MAX > j)

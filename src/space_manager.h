@@ -15,7 +15,7 @@
 
 #define SPACEM_EVENT_NOTIFY  0
 #define SPACEM_EVENT_DELETE  1
-typedef int (*spacem_cb_t)(const char *path, unsigned int event, const char *file);
+typedef void (*spacem_cb_t)(const char *path, unsigned int event, const char *file);
 
 typedef enum
 {
