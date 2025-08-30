@@ -2,7 +2,7 @@
 #define _LOG_H_
 
 
-#define ENABLE_UART_PRINT_DMA
+#define ENABLE_LOG_BUFFER
 
 extern void log_printf(const char *fmt, ...);
 

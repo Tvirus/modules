@@ -1,16 +1,16 @@
 #include "log.h"
-#ifdef ENABLE_UART_PRINT_DMA
+#ifdef ENABLE_LOG_BUFFER
 #include "ring_buffer.h"
 #endif
-#include "stm32l4xx_hal.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include "stm32u5xx_hal.h"
 
 
 extern UART_HandleTypeDef huart1;
-#define UART_DEBUG  huart1
+#define LOG_UART_HANDLE huart1
 
-#ifdef ENABLE_UART_PRINT_DMA
+#ifdef ENABLE_LOG_BUFFER
 static unsigned char uart_tx_buf[2000];
 static ring_buffer_t uart_tx_rb = RBUF_INITIALIZER(uart_tx_buf, sizeof(uart_tx_buf), 1);
 #endif
@@ -21,7 +21,7 @@ void log_printf(const char *fmt, ...)
     unsigned char buf[200];
     va_list arg;
     int len;
-#ifdef ENABLE_UART_PRINT_DMA
+#ifdef ENABLE_LOG_BUFFER
     unsigned char *p;
     unsigned int count;
 #endif
@@ -32,20 +32,20 @@ void log_printf(const char *fmt, ...)
     if (sizeof(buf) <= len)
         len = sizeof(buf) - 1;
 
-#ifdef ENABLE_UART_PRINT_DMA
+#ifdef ENABLE_LOG_BUFFER
     rbuf_put(&uart_tx_rb, buf, len, 0);
-    if (HAL_UART_STATE_READY == huart1.gState)
+    if (HAL_UART_STATE_READY == LOG_UART_HANDLE.gState)
     {
         count = rbuf_get(&uart_tx_rb, &p, uart_tx_rb.member_count);
         if (count)
-            HAL_UART_Transmit_DMA(&huart1, p, count * 1);
+            HAL_UART_Transmit_DMA(&LOG_UART_HANDLE, p, count * 1);
     }
 #else
-    HAL_UART_Transmit(&huart1, buf, len, len / 2);
+    HAL_UART_Transmit(&LOG_UART_HANDLE, buf, len, len / 2);
 #endif
 }
 
-#ifdef ENABLE_UART_PRINT_DMA
+#ifdef ENABLE_LOG_BUFFER
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     unsigned char *p;
@@ -53,6 +53,6 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 
     count = rbuf_get(&uart_tx_rb, &p, uart_tx_rb.member_count);
     if (count)
-        HAL_UART_Transmit_DMA(&huart1, p, count * 1);
+        HAL_UART_Transmit_DMA(&LOG_UART_HANDLE, p, count * 1);
 }
 #endif
