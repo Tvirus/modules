@@ -4,6 +4,7 @@
 
 #define ENABLE_LOG_BUFFER
 
+extern int log_init(void);
 extern void log_printf(const char *fmt, ...);
 
 #endif
