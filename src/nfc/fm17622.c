@@ -487,27 +487,32 @@
 
 
 
+#define FM17622_SPI
+#define FM17622_I2C_ADDR 0x50
+#define FM17622_NPD_Port GPIOB
+#define FM17622_NPD_Pin GPIO_PIN_5
+#define NPD_RESET()  HAL_GPIO_WritePin(FM17622_NPD_Port,FM17622_NPD_Pin,GPIO_PIN_RESET)
+#define NPD_SET()    HAL_GPIO_WritePin(FM17622_NPD_Port,FM17622_NPD_Pin,GPIO_PIN_SET)
+
+#ifdef FM17622_I2C
+extern I2C_HandleTypeDef hi2c1;
+#define FM17622_I2C_HANDLE hi2c1
+#elif defined(FM17622_SPI)
+extern SPI_HandleTypeDef hspi1;
+#define FM17622_SPI_HANDLE hspi1
+#endif
+
 #define LOGLEVEL_ERROR 1
 #define LOGLEVEL_INFO  2
 #define LOGLEVEL_DEBUG 3
 #define LOG(level, fmt, arg...)  do{if((level)<=pcd_log_level)log_printf("--PCD-- " fmt "\n", ##arg);}while(0)
-
-#define FM17622_SPI
-#define FM17622_I2C_ADDR  0x50
-#define FM17622_NPD_PORT  GPIOB
-#define FM17622_NPD_PIN   GPIO_PIN_5
-#define NPD_RESET()  HAL_GPIO_WritePin(FM17622_NPD_PORT,FM17622_NPD_PIN,GPIO_PIN_RESET)
-#define NPD_SET()    HAL_GPIO_WritePin(FM17622_NPD_PORT,FM17622_NPD_PIN,GPIO_PIN_SET)
-
-
 unsigned char pcd_log_level = LOGLEVEL_INFO;
 
 
 #ifdef FM17622_I2C
-extern I2C_HandleTypeDef hi2c1;
 static int fm17622_read_reg(unsigned char addr, unsigned char *value)
 {
-    if (HAL_I2C_Mem_Read(&hi2c1, FM17622_I2C_ADDR, addr, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
+    if (HAL_I2C_Mem_Read(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, addr, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_reg failed, addr:%02x !", addr);
         return -1;
@@ -516,7 +521,7 @@ static int fm17622_read_reg(unsigned char addr, unsigned char *value)
 }
 static int fm17622_write_reg(unsigned char addr, unsigned char value)
 {
-    if (HAL_I2C_Mem_Write(&hi2c1, FM17622_I2C_ADDR, addr, I2C_MEMADD_SIZE_8BIT, &value, 1, 4))
+    if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, addr, I2C_MEMADD_SIZE_8BIT, &value, 1, 4))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_write_reg failed, addr:%02x !", addr);
         return -1;
@@ -528,12 +533,12 @@ static int fm17622_read_ex_reg(unsigned char addr, unsigned char *value)
     unsigned char v;
 
     v = EXmode_RdAddr | addr;
-    if (HAL_I2C_Mem_Write(&hi2c1, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, &v, 1, 4))
+    if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, &v, 1, 4))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, addr:%02x !", addr);
         return -1;
     }
-    if (HAL_I2C_Mem_Read(&hi2c1, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
+    if (HAL_I2C_Mem_Read(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, addr:%02x !", addr);
         return -1;
@@ -546,7 +551,7 @@ static int fm17622_write_ex_reg(unsigned char addr, unsigned char value)
 
     buf[0] = EXmode_WrAddr | addr;
     buf[1] = EXmode_WrData | value;
-    if (HAL_I2C_Mem_Write(&hi2c1, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, buf, 2, 4))
+    if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, buf, 2, 4))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_write_ex_reg failed, addr:%02x !", addr);
         return -1;
@@ -561,7 +566,7 @@ static int fm17622_read_fifo(unsigned char *buf, unsigned int len)
         return -1;
     }
 
-    if (HAL_I2C_Mem_Read(&hi2c1, FM17622_I2C_ADDR, FIFODataReg, I2C_MEMADD_SIZE_8BIT, buf, len, len + 2))
+    if (HAL_I2C_Mem_Read(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, FIFODataReg, I2C_MEMADD_SIZE_8BIT, buf, len, len + 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_fifo failed !");
         return -1;
@@ -576,15 +581,14 @@ static int fm17622_write_fifo(unsigned char *data, unsigned int len)
         return -1;
     }
 
-    if (HAL_I2C_Mem_Write(&hi2c1, FM17622_I2C_ADDR, FIFODataReg, I2C_MEMADD_SIZE_8BIT, data, len, len + 2))
+    if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, FIFODataReg, I2C_MEMADD_SIZE_8BIT, data, len, len + 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_write_fifo failed !");
         return -1;
     }
     return 0;
 }
-#else ifdef FM17622_SPI
-extern SPI_HandleTypeDef hspi1;
+#elif defined(FM17622_SPI)
 int fm17622_read_reg(unsigned char addr, unsigned char *value)
 {
     unsigned char tx[2];
@@ -592,7 +596,7 @@ int fm17622_read_reg(unsigned char addr, unsigned char *value)
 
     tx[0] = 0x80 | (addr << 1);
     tx[1] = 0;
-    if (HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, 2))
+    if (HAL_SPI_TransmitReceive(&FM17622_SPI_HANDLE, tx, rx, 2, 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_reg failed, addr:%02x !", addr);
         return -1;
@@ -606,7 +610,7 @@ static int fm17622_write_reg(unsigned char addr, unsigned char value)
 
     tx[0] = addr << 1;
     tx[1] = value;
-    if (HAL_SPI_Transmit(&hspi1, tx, 2, 2))
+    if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 2, 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_write_reg failed, addr:%02x !", addr);
         return -1;
@@ -620,7 +624,7 @@ static int fm17622_read_ex_reg(unsigned char addr, unsigned char *value)
 
     tx[0] = EXReg << 1;
     tx[1] = EXmode_RdAddr | addr;
-    if (HAL_SPI_Transmit(&hspi1, tx, 2, 2))
+    if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 2, 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, addr:%02x !", addr);
         return -1;
@@ -628,7 +632,7 @@ static int fm17622_read_ex_reg(unsigned char addr, unsigned char *value)
 
     tx[0] = 0x80 | (EXReg << 1);
     tx[1] = 0;
-    if (HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, 2))
+    if (HAL_SPI_TransmitReceive(&FM17622_SPI_HANDLE, tx, rx, 2, 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed !");
         return -1;
@@ -644,7 +648,7 @@ static int fm17622_write_ex_reg(unsigned char addr, unsigned char value)
     tx[1] = EXmode_WrAddr | addr;
     tx[2] = EXReg << 1;
     tx[3] = EXmode_WrData | value;
-    if (HAL_SPI_Transmit(&hspi1, tx, 4, 2))
+    if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 4, 2))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_write_ex_reg failed, addr:%02x !", addr);
         return -1;
@@ -657,7 +661,7 @@ static int fm17622_read_fifo(unsigned char *buf, unsigned int len)
     unsigned char rx[1 + PCD_FIFO_SIZE] = {0};
 
     memset(tx, 0x80 | (FIFODataReg << 1), len);
-    HAL_SPI_TransmitReceive(&hspi1, tx, rx, 1 + len, 4);
+    HAL_SPI_TransmitReceive(&FM17622_SPI_HANDLE, tx, rx, 1 + len, 4);
     memcpy(buf, rx + 1, len);
     return 0;
 }
@@ -667,7 +671,7 @@ static int fm17622_write_fifo(unsigned char *data, unsigned int len)
 
     tx[0] = FIFODataReg << 1;
     memcpy(tx + 1, data, len);
-    if (HAL_SPI_Transmit(&hspi1, tx, 1 + len, 4))
+    if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 1 + len, 4))
     {
         LOG(LOGLEVEL_ERROR, "fm17622_write_fifo failed !");
         return -1;
