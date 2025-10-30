@@ -10,6 +10,7 @@
 #define LOGLEVEL_INFO   2
 #define LOGLEVEL_DEBUG  3
 #define LOG(level, fmt, arg...)  do{if((level) <= j1939_log_level)log_printf("--J1939-- " fmt, ##arg);}while(0)
+unsigned char j1939_log_level = LOGLEVEL_ERROR;
 
 
 #ifndef CAN_MSG_COUNT_MAX
@@ -82,8 +83,6 @@ typedef struct
     unsigned int ts;  /* 上一次的发送时间，ms */
 }j1939_large_msg_tx_info_t;
 
-
-unsigned char j1939_log_level = LOGLEVEL_ERROR;
 
 static unsigned int can_msg_head = 0;
 static unsigned int can_msg_tail = 0;  /* 永远指向空节点 */
@@ -599,6 +598,7 @@ static void handle_tpcm_cts(const j1939_msg_header_t *header, const unsigned cha
         j1939_large_msg_tx_list[i].ts = HAL_GetTick();
     }
 }
+
 static void handle_tpcm_ack(const j1939_msg_header_t *header, const unsigned char *data, unsigned int len)
 {
     j1939_tpcm_ack_t *tpcm_ack = (j1939_tpcm_ack_t *)data;
@@ -788,6 +788,7 @@ void j1939_task(void)
                 for (; cur_packets < total_packets - 1; cur_packets++)
                 {
                     j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7], 7);
+                    //HAL_Delay(0);
                 }
                 j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7],
                                 j1939_large_msg_tx_list[i].total_bytes - cur_packets * 7);
@@ -818,28 +819,31 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     CAN_RxHeaderTypeDef header;
     can_msg_t msg;
 
-    if (HAL_OK != HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &header, msg.data))
-        return;
+    while (1)
+    {
+        if (HAL_OK != HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &header, msg.data))
+            return;
 
-    msg.chn = 1;
-    if (CAN_ID_EXT == header.IDE)
-    {
-        msg.ide = 1;
-        msg.extension_id[0] = (header.ExtId >> 24) & 0xff;
-        msg.extension_id[1] = (header.ExtId >> 16) & 0xff;
-        msg.extension_id[2] = (header.ExtId >> 8) & 0xff;
-        msg.extension_id[3] = header.ExtId & 0xff;
+        msg.chn = 1;
+        if (CAN_ID_EXT == header.IDE)
+        {
+            msg.ide = 1;
+            msg.extension_id[0] = (header.ExtId >> 24) & 0xff;
+            msg.extension_id[1] = (header.ExtId >> 16) & 0xff;
+            msg.extension_id[2] = (header.ExtId >> 8) & 0xff;
+            msg.extension_id[3] = header.ExtId & 0xff;
+        }
+        else
+        {
+            msg.ide = 0;
+            msg.base_id[0] = (header.StdId >> 8) & 0xff;
+            msg.base_id[1] = header.StdId & 0xff;
+        }
+        if (CAN_RTR_REMOTE == header.RTR)
+            msg.rtr = 1;
+        else
+            msg.rtr = 0;
+        msg.dlc = header.DLC;
+        j1939_recv_can_msg(&msg);
     }
-    else
-    {
-        msg.ide = 0;
-        msg.base_id[0] = (header.StdId >> 8) & 0xff;
-        msg.base_id[1] = header.StdId & 0xff;
-    }
-    if (CAN_RTR_REMOTE == header.RTR)
-        msg.rtr = 1;
-    else
-        msg.rtr = 0;
-    msg.dlc = header.DLC;
-    j1939_recv_can_msg(&msg);
 }
