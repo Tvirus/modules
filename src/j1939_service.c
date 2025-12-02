@@ -9,7 +9,7 @@
 #define LOGLEVEL_ERROR  1
 #define LOGLEVEL_INFO   2
 #define LOGLEVEL_DEBUG  3
-#define LOG(level, fmt, arg...)  do{if((level) <= j1939_log_level)log_printf("--J1939-- " fmt, ##arg);}while(0)
+#define LOG(level, fmt, arg...)  do{if((level) <= j1939_log_level)log_printf("--J1939-- " fmt "\n", ##arg);}while(0)
 unsigned char j1939_log_level = LOGLEVEL_ERROR;
 
 
@@ -115,7 +115,7 @@ int j1939_register_msg_cb(const j1939_msg_header_t *header, j1939_msg_cb_t cb)
         return 0;
     }
 
-    LOG(LOGLEVEL_ERROR, "register msg cb failed !\n");
+    LOG(LOGLEVEL_ERROR, "register msg cb failed !");
     return -1;
 }
 
@@ -142,7 +142,7 @@ int j1939_register_large_msg_cb(const j1939_msg_header_t *header, void *buf, uns
         return 0;
     }
 
-    LOG(LOGLEVEL_ERROR, "register large msg cb failed !\n");
+    LOG(LOGLEVEL_ERROR, "register large msg cb failed !");
     return -1;
 }
 
@@ -153,7 +153,7 @@ int j1939_recv_can_msg(const can_msg_t *msg)
 
     if ((can_msg_tail + 1 == can_msg_head) || ((0 == can_msg_head) && (CAN_MSG_COUNT_MAX - 1 == can_msg_tail)))
     {
-        LOG(LOGLEVEL_ERROR, "recv can msg failed !\n");
+        LOG(LOGLEVEL_ERROR, "recv can msg failed !");
         return -1;
     }
 
@@ -196,7 +196,7 @@ int j1939_send_msg(const j1939_msg_header_t *header, const void *data, unsigned 
     can_header.RTR = CAN_RTR_DATA;
     can_header.DLC = len;
 
-    LOG(LOGLEVEL_DEBUG, "send can msg: [%02X->%02X] PGN:%06x extid:%x, len:%u\n",
+    LOG(LOGLEVEL_DEBUG, "send can msg: [%02X->%02X] PGN:%06x extid:%x, len:%u",
                          header->src_addr, header->dst_addr, header->pgn, can_header.ExtId, len);
 
     /* 发送邮箱需要配置为fifo模式! */
@@ -206,13 +206,13 @@ int j1939_send_msg(const j1939_msg_header_t *header, const void *data, unsigned 
             continue;
         if (HAL_OK != HAL_CAN_AddTxMessage(&hcan1, &can_header, data, &mail_box))
         {
-            LOG(LOGLEVEL_ERROR, "send msg failed: [%02X->%02X] PGN:%06x, len:%u !\n", header->src_addr, header->dst_addr, header->pgn, len);
+            LOG(LOGLEVEL_ERROR, "send msg failed: [%02X->%02X] PGN:%06x, len:%u !", header->src_addr, header->dst_addr, header->pgn, len);
             return -1;
         }
         return 0;
     }
 
-    LOG(LOGLEVEL_ERROR, "send msg timeout: [%02X->%02X] PGN:%06x, len:%u !\n", header->src_addr, header->dst_addr, header->pgn, len);
+    LOG(LOGLEVEL_ERROR, "send msg timeout: [%02X->%02X] PGN:%06x, len:%u !", header->src_addr, header->dst_addr, header->pgn, len);
     return -1;
 }
 
@@ -233,7 +233,7 @@ int j1939_send_rqst(const j1939_msg_header_t *header)
     rqst.pgn[0] = header->pgn & 0xff;
     rqst.pgn[1] = (header->pgn >> 8) & 0xff;
     rqst.pgn[2] = (header->pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send rqst: [%02X->%02X] PGN:%06x\n", header->src_addr, header->dst_addr, header->pgn);
+    LOG(LOGLEVEL_INFO, "send rqst: [%02X->%02X] PGN:%06x", header->src_addr, header->dst_addr, header->pgn);
     return j1939_send_msg(&_header, (unsigned char *)&rqst, sizeof(rqst));
 }
 
@@ -259,7 +259,7 @@ int j1939_send_ackm(const j1939_msg_header_t *header, unsigned char ack, unsigne
     ackm.pgn[0] = header->pgn & 0xff;
     ackm.pgn[1] = (header->pgn >> 8) & 0xff;
     ackm.pgn[2] = (header->pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send ackm: [%02X->%02X] PGN:%06x, ack:%u group:%02x ori:%02x\n",
+    LOG(LOGLEVEL_INFO, "send ackm: [%02X->%02X] PGN:%06x, ack:%u group:%02x ori:%02x",
         header->src_addr, header->dst_addr, header->pgn, ack, group_fun, ori_addr);
     return j1939_send_msg(&_header, (unsigned char *)&ackm, sizeof(ackm));
 }
@@ -283,7 +283,7 @@ int j1939_send_tpcm_rts(unsigned int pgn, unsigned char dst, unsigned char src, 
     rts.pgn[0] = pgn & 0xff;
     rts.pgn[1] = (pgn >> 8) & 0xff;
     rts.pgn[2] = (pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send tpcm_rts: [%02X->%02X] PGN:%06x, size:%u packets:%u\n", src, dst, pgn, total_bytes, rts.total_packets);
+    LOG(LOGLEVEL_INFO, "send tpcm_rts: [%02X->%02X] PGN:%06x, size:%u packets:%u", src, dst, pgn, total_bytes, rts.total_packets);
     return j1939_send_msg(&header, (unsigned char *)&rts, sizeof(rts));
 }
 
@@ -306,7 +306,7 @@ int j1939_send_tpcm_cts(unsigned int pgn, unsigned char dst, unsigned char src, 
     cts.pgn[0] = pgn & 0xff;
     cts.pgn[1] = (pgn >> 8) & 0xff;
     cts.pgn[2] = (pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send tpcm_cts: [%02X->%02X] PGN:%06x, max:%u next:%u\n", src, dst, pgn, max_packets, next_packet);
+    LOG(LOGLEVEL_INFO, "send tpcm_cts: [%02X->%02X] PGN:%06x, max:%u next:%u", src, dst, pgn, max_packets, next_packet);
     return j1939_send_msg(&header, (unsigned char *)&cts, sizeof(cts));
 }
 
@@ -329,7 +329,7 @@ int j1939_send_tpcm_ack(unsigned int pgn, unsigned char dst, unsigned char src, 
     ack.pgn[0] = pgn & 0xff;
     ack.pgn[1] = (pgn >> 8) & 0xff;
     ack.pgn[2] = (pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send tpcm_ack: [%02X->%02X] PGN:%06x, size:%u packet:%u\n", src, dst, pgn, bytes, packets);
+    LOG(LOGLEVEL_INFO, "send tpcm_ack: [%02X->%02X] PGN:%06x, size:%u packet:%u", src, dst, pgn, bytes, packets);
     return j1939_send_msg(&header, (unsigned char *)&ack, sizeof(ack));
 }
 
@@ -350,7 +350,7 @@ int j1939_send_tpcm_abort(unsigned int pgn, unsigned char dst, unsigned char src
     abort.pgn[0] = pgn & 0xff;
     abort.pgn[1] = (pgn >> 8) & 0xff;
     abort.pgn[2] = (pgn >> 16) & 0xff;
-    LOG(LOGLEVEL_INFO, "send tpcm_abort: [%02X->%02X] PGN:%06x, reason:%u role:%u\n", src, dst, pgn, reason, role);
+    LOG(LOGLEVEL_INFO, "send tpcm_abort: [%02X->%02X] PGN:%06x, reason:%u role:%u", src, dst, pgn, reason, role);
     return j1939_send_msg(&header, (unsigned char *)&abort, sizeof(abort));
 }
 
@@ -372,7 +372,7 @@ int j1939_send_tpdt(unsigned char dst, unsigned char src, unsigned char seq, con
     memcpy(tpdt.data, data, len);
     if (7 > len)
         memset(&tpdt.data[len], 0xff, 7 - len);
-    LOG(LOGLEVEL_INFO, "send tpdt: [%02X->%02X], seq:%u len:%u\n", src, dst, seq, len);
+    LOG(LOGLEVEL_INFO, "send tpdt: [%02X->%02X], seq:%u len:%u", src, dst, seq, len);
     return j1939_send_msg(&header, (unsigned char *)&tpdt, sizeof(tpdt));
 }
 
@@ -399,11 +399,11 @@ int j1939_create_large_msg_sending(const j1939_msg_header_t *header, const void 
         j1939_large_msg_tx_list[i].ts = 0;
         j1939_large_msg_tx_list[i].data = data;
 
-        LOG(LOGLEVEL_INFO, "create large msg sending: [%02X->%02X] PGN:%06x, size:%u\n", header->src_addr, header->dst_addr, header->pgn, len);
+        LOG(LOGLEVEL_INFO, "create large msg sending: [%02X->%02X] PGN:%06x, size:%u", header->src_addr, header->dst_addr, header->pgn, len);
         return i;
     }
 
-    LOG(LOGLEVEL_ERROR, "create large msg sending failed: [%02X->%02X] PGN:%06x, size:%u !\n", header->src_addr, header->dst_addr, header->pgn, len);
+    LOG(LOGLEVEL_ERROR, "create large msg sending failed: [%02X->%02X] PGN:%06x, size:%u !", header->src_addr, header->dst_addr, header->pgn, len);
     return -1;
 }
 int j1939_destroy_large_msg_sending(int handle)
@@ -411,7 +411,7 @@ int j1939_destroy_large_msg_sending(int handle)
     if ((J1939_LARGE_MSG_TX_MAX <= handle) || (0 > handle))
         return -1;
 
-    LOG(LOGLEVEL_INFO, "destroy large sending: [%02X->%02X] PGN:%06x\n",
+    LOG(LOGLEVEL_INFO, "destroy large sending: [%02X->%02X] PGN:%06x",
                         j1939_large_msg_tx_list[handle].header.src_addr,
                         j1939_large_msg_tx_list[handle].header.dst_addr,
                         j1939_large_msg_tx_list[handle].header.pgn);
@@ -481,7 +481,7 @@ static void handle_tpdt(const j1939_msg_header_t *header, unsigned char *data, u
         buf           = j1939_large_msg_cb_list[i].buf;
         if (cur_packets != tpdt->seq_num)
         {
-            LOG(LOGLEVEL_ERROR, "recv large msg error: [%02X->%02X] PGN:%06x, seq:%u expact_seq:%u !\n",
+            LOG(LOGLEVEL_ERROR, "recv large msg error: [%02X->%02X] PGN:%06x, seq:%u expact_seq:%u !",
                 header->src_addr, header->dst_addr, j1939_large_msg_cb_list[i].header.pgn, tpdt->seq_num, cur_packets);
             continue;
         }
@@ -491,13 +491,13 @@ static void handle_tpdt(const j1939_msg_header_t *header, unsigned char *data, u
         {
             memcpy(&buf[cur_bytes], tpdt->data, 7);
             j1939_large_msg_cb_list[i].cur_bytes += 7;
-            LOG(LOGLEVEL_DEBUG, "recv large msg: [%02X->%02X] PGN:%06x, seq:%u/%u\n",
+            LOG(LOGLEVEL_DEBUG, "recv large msg: [%02X->%02X] PGN:%06x, seq:%u/%u",
                 header->src_addr, header->dst_addr, j1939_large_msg_cb_list[i].header.pgn, tpdt->seq_num, total_packets);
         }
         else if (cur_packets == total_packets)
         {
             memcpy(&buf[cur_bytes], tpdt->data, total_bytes - cur_bytes);
-            LOG(LOGLEVEL_INFO, "recv large msg OK: [%02X->%02X] PGN:%06x, size:%u packets:%u\n",
+            LOG(LOGLEVEL_INFO, "recv large msg OK: [%02X->%02X] PGN:%06x, size:%u packets:%u",
                 header->src_addr, header->dst_addr, j1939_large_msg_cb_list[i].header.pgn, total_bytes, total_packets);
             j1939_send_tpcm_ack(j1939_large_msg_cb_list[i].header.pgn,
                                 j1939_large_msg_cb_list[i].header.src_addr,
@@ -541,14 +541,14 @@ static void handle_tpcm_rts(const j1939_msg_header_t *header, unsigned char *dat
             if (j1939_large_msg_cb_list[i].start)
             {
                 j1939_large_msg_cb_list[i].start = 0;
-                LOG(LOGLEVEL_INFO, "recv tpcm_rts, stop old conn: [%02X->%02X] PGN:%06x\n",
+                LOG(LOGLEVEL_INFO, "recv tpcm_rts, stop old conn: [%02X->%02X] PGN:%06x",
                     header->src_addr, header->dst_addr, j1939_large_msg_cb_list[i].header.pgn);
             }
             continue;
         }
         if (j1939_large_msg_cb_list[i].buf_size < total_bytes)
         {
-            LOG(LOGLEVEL_ERROR, "recv tpcm_rts [%02X->%02X] PGN:%06x, total size(%u) exceeds cb buf size(%u) !\n",
+            LOG(LOGLEVEL_ERROR, "recv tpcm_rts [%02X->%02X] PGN:%06x, total size(%u) exceeds cb buf size(%u) !",
                 header->src_addr, header->dst_addr, pgn, total_bytes, j1939_large_msg_cb_list[i].buf_size);
             j1939_large_msg_cb_list[i].start = 0;
             continue;
@@ -561,7 +561,7 @@ static void handle_tpcm_rts(const j1939_msg_header_t *header, unsigned char *dat
         j1939_large_msg_cb_list[i].start = 1;
         if (0 == cts_sent)
         {
-            LOG(LOGLEVEL_INFO, "recv tpcm_rts: [%02X->%02X] PGN:%06x, size:%u packets:%u\n",
+            LOG(LOGLEVEL_INFO, "recv tpcm_rts: [%02X->%02X] PGN:%06x, size:%u packets:%u",
                 header->src_addr, header->dst_addr, pgn, total_bytes, tpcm_rts->total_packets);
             cts_sent = 1;
             j1939_send_tpcm_cts(pgn, header->src_addr, header->dst_addr, tpcm_rts->total_packets, 1);
@@ -589,7 +589,7 @@ static void handle_tpcm_cts(const j1939_msg_header_t *header, const unsigned cha
             continue;
 
         /* 简化协议 */
-        LOG(LOGLEVEL_INFO, "recv tpcm_cts: [%02X->%02X] PGN:%06x, max:%u next:%u, state:%u\n",
+        LOG(LOGLEVEL_INFO, "recv tpcm_cts: [%02X->%02X] PGN:%06x, max:%u next:%u, state:%u",
             header->src_addr, header->dst_addr, pgn, tpcm_cts->max_packets, tpcm_cts->next_packet, j1939_large_msg_tx_list[i].state);
         if (J1939_LARGE_MSG_TX_STATE_WAIT_CTS != j1939_large_msg_tx_list[i].state)
             continue;
@@ -618,7 +618,7 @@ static void handle_tpcm_ack(const j1939_msg_header_t *header, const unsigned cha
             || (j1939_large_msg_tx_list[i].header.pgn != pgn))
             continue;
 
-        LOG(LOGLEVEL_INFO, "recv tpcm_ack: [%02X->%02X] PGN:%06x, size:%u packets:%u, state:%u\n",
+        LOG(LOGLEVEL_INFO, "recv tpcm_ack: [%02X->%02X] PGN:%06x, size:%u packets:%u, state:%u",
             header->src_addr, header->dst_addr, pgn, tpcm_ack->total_bytes[0] | tpcm_ack->total_bytes[1] << 8,
             tpcm_ack->total_packets, j1939_large_msg_tx_list[i].state);
         if ((J1939_LARGE_MSG_TX_STATE_WAIT_ACK != j1939_large_msg_tx_list[i].state))
@@ -649,7 +649,7 @@ static void handle_tpcm_abort(const j1939_msg_header_t *header, unsigned char *d
                 || (j1939_large_msg_cb_list[i].header.pgn != pgn))
                 continue;
 
-            LOG(LOGLEVEL_INFO, "recv ORIGINATOR tpcm_abort: [%02X->%02X] PGN:%06x, reason:%u\n",
+            LOG(LOGLEVEL_INFO, "recv ORIGINATOR tpcm_abort: [%02X->%02X] PGN:%06x, reason:%u",
                 header->src_addr, header->dst_addr, pgn, tpcm_abort->reason);
             j1939_large_msg_cb_list[i].start = 0;
         }
@@ -664,7 +664,7 @@ static void handle_tpcm_abort(const j1939_msg_header_t *header, unsigned char *d
                 || (j1939_large_msg_tx_list[i].header.pgn != pgn))
                 continue;
 
-            LOG(LOGLEVEL_INFO, "recv RESPONDER tpcm_abort: [%02X->%02X] PGN:%06x, reason:%u state:%u\n",
+            LOG(LOGLEVEL_INFO, "recv RESPONDER tpcm_abort: [%02X->%02X] PGN:%06x, reason:%u state:%u",
                 header->src_addr, header->dst_addr, pgn, tpcm_abort->reason, j1939_large_msg_tx_list[i].state);
             if (!J1939_LARGE_MSG_TX_STARTED(j1939_large_msg_tx_list[i].state))
                 continue;
@@ -718,7 +718,7 @@ void j1939_task(void)
         header.ext_data_page = pdu->edp;
         header.src_addr = pdu->sa;
 
-        LOG(LOGLEVEL_DEBUG, "recv can msg: [%02X->%02X] PGN:%06x, len:%u data:%02x %02x %02x %02x %02x %02x %02x %02x\n",
+        LOG(LOGLEVEL_DEBUG, "recv can msg: [%02X->%02X] PGN:%06x, len:%u data:%02x %02x %02x %02x %02x %02x %02x %02x",
             header.src_addr, header.dst_addr, header.pgn, can_msg->dlc,
             can_msg->data[0], can_msg->data[1], can_msg->data[2], can_msg->data[3],
             can_msg->data[4], can_msg->data[5], can_msg->data[6], can_msg->data[7]);
@@ -776,7 +776,7 @@ void j1939_task(void)
             if (J1939_TP_TIME_T3 > ((unsigned int)(HAL_GetTick() - j1939_large_msg_tx_list[i].ts)))
                 continue;
 
-            LOG(LOGLEVEL_ERROR, "send large msg timeout: [%02X->%02X] PGN:%06x, size:%u state:%u !\n",
+            LOG(LOGLEVEL_ERROR, "send large msg timeout: [%02X->%02X] PGN:%06x, size:%u state:%u !",
                 src, dst, pgn, j1939_large_msg_tx_list[i].total_bytes, state);
             j1939_send_tpcm_abort(pgn, dst, src, J1939_TPCM_ABORT_REASON_TIMEOUT, J1939_TPCM_ABORT_ROLE_ORI);
             j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_TIMEOUT;
@@ -788,7 +788,7 @@ void j1939_task(void)
                 for (; cur_packets < total_packets - 1; cur_packets++)
                 {
                     j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7], 7);
-                    //HAL_Delay(0);
+                    HAL_Delay(0);
                 }
                 j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7],
                                 j1939_large_msg_tx_list[i].total_bytes - cur_packets * 7);
