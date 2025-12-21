@@ -510,50 +510,50 @@ unsigned char pcd_log_level = LOGLEVEL_INFO;
 
 
 #ifdef FM17622_I2C
-static int fm17622_read_reg(unsigned char addr, unsigned char *value)
+static int fm17622_read_reg(unsigned char reg, unsigned char *value)
 {
-    if (HAL_I2C_Mem_Read(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, addr, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
+    if (HAL_I2C_Mem_Read(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_read_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_read_reg failed, reg:%02x !", reg);
         return -1;
     }
     return 0;
 }
-static int fm17622_write_reg(unsigned char addr, unsigned char value)
+static int fm17622_write_reg(unsigned char reg, unsigned char value)
 {
-    if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, addr, I2C_MEMADD_SIZE_8BIT, &value, 1, 4))
+    if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &value, 1, 4))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_write_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_write_reg failed, reg:%02x !", reg);
         return -1;
     }
     return 0;
 }
-static int fm17622_read_ex_reg(unsigned char addr, unsigned char *value)
+static int fm17622_read_ex_reg(unsigned char reg, unsigned char *value)
 {
     unsigned char v;
 
-    v = EXmode_RdAddr | addr;
+    v = EXmode_RdAddr | reg;
     if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, &v, 1, 4))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, reg:%02x !", reg);
         return -1;
     }
     if (HAL_I2C_Mem_Read(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, value, 1, 4))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, reg:%02x !", reg);
         return -1;
     }
     return 0;
 }
-static int fm17622_write_ex_reg(unsigned char addr, unsigned char value)
+static int fm17622_write_ex_reg(unsigned char reg, unsigned char value)
 {
     unsigned char buf[2];
 
-    buf[0] = EXmode_WrAddr | addr;
+    buf[0] = EXmode_WrAddr | reg;
     buf[1] = EXmode_WrData | value;
     if (HAL_I2C_Mem_Write(&FM17622_I2C_HANDLE, FM17622_I2C_ADDR, EXReg, I2C_MEMADD_SIZE_8BIT, buf, 2, 4))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_write_ex_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_write_ex_reg failed, reg:%02x !", reg);
         return -1;
     }
     return 0;
@@ -589,44 +589,44 @@ static int fm17622_write_fifo(unsigned char *data, unsigned int len)
     return 0;
 }
 #elif defined(FM17622_SPI)
-int fm17622_read_reg(unsigned char addr, unsigned char *value)
+int fm17622_read_reg(unsigned char reg, unsigned char *value)
 {
     unsigned char tx[2];
     unsigned char rx[2];
 
-    tx[0] = 0x80 | (addr << 1);
+    tx[0] = 0x80 | (reg << 1);
     tx[1] = 0;
     if (HAL_SPI_TransmitReceive(&FM17622_SPI_HANDLE, tx, rx, 2, 2))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_read_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_read_reg failed, reg:%02x !", reg);
         return -1;
     }
     *value = rx[1];
     return 0;
 }
-static int fm17622_write_reg(unsigned char addr, unsigned char value)
+static int fm17622_write_reg(unsigned char reg, unsigned char value)
 {
     unsigned char tx[2];
 
-    tx[0] = addr << 1;
+    tx[0] = reg << 1;
     tx[1] = value;
     if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 2, 2))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_write_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_write_reg failed, reg:%02x !", reg);
         return -1;
     }
     return 0;
 }
-static int fm17622_read_ex_reg(unsigned char addr, unsigned char *value)
+static int fm17622_read_ex_reg(unsigned char reg, unsigned char *value)
 {
     unsigned char tx[2];
     unsigned char rx[2];
 
     tx[0] = EXReg << 1;
-    tx[1] = EXmode_RdAddr | addr;
+    tx[1] = EXmode_RdAddr | reg;
     if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 2, 2))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_read_ex_reg failed, reg:%02x !", reg);
         return -1;
     }
 
@@ -640,17 +640,17 @@ static int fm17622_read_ex_reg(unsigned char addr, unsigned char *value)
     *value = rx[1];
     return 0;
 }
-static int fm17622_write_ex_reg(unsigned char addr, unsigned char value)
+static int fm17622_write_ex_reg(unsigned char reg, unsigned char value)
 {
     unsigned char tx[4];
 
     tx[0] = EXReg << 1;
-    tx[1] = EXmode_WrAddr | addr;
+    tx[1] = EXmode_WrAddr | reg;
     tx[2] = EXReg << 1;
     tx[3] = EXmode_WrData | value;
     if (HAL_SPI_Transmit(&FM17622_SPI_HANDLE, tx, 4, 2))
     {
-        LOG(LOGLEVEL_ERROR, "fm17622_write_ex_reg failed, addr:%02x !", addr);
+        LOG(LOGLEVEL_ERROR, "fm17622_write_ex_reg failed, reg:%02x !", reg);
         return -1;
     }
     return 0;
@@ -680,19 +680,19 @@ static int fm17622_write_fifo(unsigned char *data, unsigned int len)
 }
 #endif
 
-static int fm17622_set_bits(unsigned char addr, unsigned char mask, unsigned char value)
+static int fm17622_set_bits(unsigned char reg, unsigned char mask, unsigned char value)
 {
     unsigned char v;
 
     if (0xFF == mask)
-        return fm17622_write_reg(addr, value);
+        return fm17622_write_reg(reg, value);
 
-    if (fm17622_read_reg(addr, &v))
+    if (fm17622_read_reg(reg, &v))
         return -1;
 
     v &= ~mask;
     v |= value & mask;
-    return fm17622_write_reg(addr, v);
+    return fm17622_write_reg(reg, v);
 }
 
 
