@@ -23,7 +23,7 @@ static char* check_sentence(const char *str)
         return NULL;
     if ('$' != *str++)
     {
-        LOG(LOGLEVEL_ERROR, "sentence does not start with '$' !");
+        LOG(LOGLEVEL_DEBUG, "sentence does not start with '$' !");
         return NULL;
     }
     if ('*' == *str)
@@ -294,7 +294,7 @@ static int nmea_parse_gga(const char *str, format_gga_t *gga)
             gga->quality = GGA_QUALITY_SIMULATOR;
         else
         {
-            LOG(LOGLEVEL_ERROR, "unsupported gga quality: '%c' !", c);
+            LOG(LOGLEVEL_ERROR, "unsupported gga quality: 0x%02x !", c);
             return -1;
         }
     }
@@ -450,6 +450,290 @@ static int nmea_parse_gga(const char *str, format_gga_t *gga)
     return 0;
 }
 
+static int nmea_parse_rmc(const char *str, format_rmc_t *rmc)
+{
+    char *p[13];
+    int32_t val;
+    char c;
+
+    str_sep(str, p, sizeof(p) / sizeof(p[0]));
+
+    /* time */
+    if (NULL == p[0])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc time not exist !");
+        return -1;
+    }
+    if (',' != *(p[0] + 1))
+    {
+        if ((NULL == str_to_int(p[0] + 1, 3, &val)) || (0 > val) || (235959999 < val))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc time format err !");
+            return -1;
+        }
+        rmc->utc_hour = val / 10000000;
+        rmc->utc_minute = val / 100000 - (val / 10000000) * 100;
+        rmc->utc_second = val / 1000 - (val / 100000) * 100;
+        rmc->utc_usecond = val - (val / 1000) * 1000;
+        rmc->time_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc time is none");
+        rmc->time_valid = 0;
+    }
+
+    /* status */
+    if (NULL == p[1])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc status not exist !");
+        return -1;
+    }
+    c = *(p[1] + 1);
+    if (',' != c)
+    {
+        if ('V' == c)
+            rmc->status = RMC_STATUS_INVALID;
+        else if ('A' == c)
+            rmc->status = RMC_STATUS_AUTONOMOUS;
+        else if ('D' == c)
+            rmc->status = RMC_STATUS_DIFFERENTIAL;
+        else
+        {
+            LOG(LOGLEVEL_ERROR, "unsupported rmc status: 0x%02x !", c);
+            return -1;
+        }
+    }
+    else
+    {
+        LOG(LOGLEVEL_ERROR, "rmc status is none !");
+        return -1;
+    }
+
+    /* latitude */
+    if (NULL == p[2])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc latitude not exist !");
+        return -1;
+    }
+    if (',' != *(p[2] + 1))
+    {
+        if (NULL == str_dm_to_d(p[2] + 1, 9, &rmc->latitude))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc latitude format err !");
+            return -1;
+        }
+        rmc->latitude_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc latitude is none");
+        rmc->latitude_valid = 0;
+    }
+
+    /* longitude */
+    if (NULL == p[4])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc longitude not exist !");
+        return -1;
+    }
+    if (',' != *(p[4] + 1))
+    {
+        if (NULL == str_dm_to_d(p[4] + 1, 9, &rmc->longitude))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc longitude format err !");
+            return -1;
+        }
+        rmc->longitude_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc longitude is none");
+        rmc->longitude_valid = 0;
+    }
+
+    /* speed */
+    if (NULL == p[6])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc speed not exist !");
+        return -1;
+    }
+    if (',' != *(p[6] + 1))
+    {
+        if ((NULL == str_to_int(p[6] + 1, 3, &val)) || (0 > val))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc speed format err !");
+            return -1;
+        }
+        rmc->speed = val;
+        rmc->speed_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc speed is none");
+        rmc->speed_valid = 0;
+    }
+
+    /* course */
+    if (NULL == p[7])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc course not exist !");
+        return -1;
+    }
+    if (',' != *(p[7] + 1))
+    {
+        if ((NULL == str_to_int(p[7] + 1, 2, &val)) || (0 > val) || (36000 <= val))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc course format err !");
+            return -1;
+        }
+        rmc->course = val;
+        rmc->course_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc course is none");
+        rmc->course_valid = 0;
+    }
+
+    /* date */
+    if (NULL == p[8])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc date not exist !");
+        return -1;
+    }
+    if (',' != *(p[8] + 1))
+    {
+        if ((NULL == str_to_int(p[8] + 1, 0, &val)) || (0 > val))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc date format err !");
+            return -1;
+        }
+        rmc->day   = val / 10000;
+        rmc->month = val / 100 - (val / 10000) * 100;
+        rmc->year   = val - (val / 100) * 100;
+        if ((0 == rmc->day) || (31 < rmc->day) || (0 == rmc->month) || (12 < rmc->month) || (25 > rmc->year))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc date format err: %d %u-%u-%u !", val, rmc->day, rmc->month, rmc->year);
+            return -1;
+        }
+        rmc->date_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc date is none");
+        rmc->date_valid = 0;
+    }
+
+    /* declination */
+    if ((NULL == p[9]) || (NULL == p[10]))
+    {
+        LOG(LOGLEVEL_ERROR, "rmc declination not exist !");
+        return -1;
+    }
+    if (',' != *(p[9] + 1))
+    {
+        if ((NULL == str_to_int(p[9] + 1, 1, &val)) || (0 > val))
+        {
+            LOG(LOGLEVEL_ERROR, "rmc declination format err !");
+            return -1;
+        }
+        rmc->declination = val;
+        c = *(p[10] + 1);
+        if ('W' == c)
+        {
+            rmc->declination = -rmc->declination;
+        }
+        else if ('E' == c)
+        {
+            ;
+        }
+        else
+        {
+            LOG(LOGLEVEL_ERROR, "rmc declination direction format err: 0x%02x !", c);
+            return -1;
+        }
+        rmc->declination_valid = 1;
+    }
+    else
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc declination is none");
+        rmc->declination_valid = 0;
+    }
+
+    /* mode */
+    if (NULL == p[11])
+    {
+        LOG(LOGLEVEL_ERROR, "rmc mode not exist !");
+        return -1;
+    }
+    c = *(p[11] + 1);
+    if (',' != c)
+    {
+        if ('A' == c)
+            rmc->mode = RMC_MODE_AUTONOMOUS;
+        else if ('D' == c)
+            rmc->mode = RMC_MODE_DIFFERENTIAL;
+        else if ('E' == c)
+            rmc->mode = RMC_MODE_ESTIMATED;
+        else if ('F' == c)
+            rmc->mode = RMC_MODE_FLOAT_RTK;
+        else if ('M' == c)
+            rmc->mode = RMC_MODE_MANUAL;
+        else if ('N' == c)
+            rmc->mode = RMC_MODE_NO_FIX;
+        else if ('P' == c)
+            rmc->mode = RMC_MODE_PRECISE;
+        else if ('R' == c)
+            rmc->mode = RMC_MODE_RTK;
+        else if ('S' == c)
+            rmc->mode = RMC_MODE_SIMULATOR;
+        else
+        {
+            LOG(LOGLEVEL_ERROR, "rmc mode is unknown: 0x%02x !", c);
+            return -1;
+        }
+    }
+    else
+    {
+        LOG(LOGLEVEL_ERROR, "rmc mode is none !");
+        return -1;
+    }
+
+    /* navigational status */
+    if (NULL == p[12])
+    {
+        LOG(LOGLEVEL_DEBUG, "rmc navigational not exist");
+        rmc->navigational = RMC_NAVIGATIONAL_NULL;
+        return 0;
+    }
+    c = *(p[12] + 1);
+    if ('*' != c)
+    {
+        if ('C' == c)
+            rmc->navigational = RMC_NAVIGATIONAL_CAUTION;
+        else if ('S' == c)
+            rmc->navigational = RMC_NAVIGATIONAL_SAFE;
+        else if ('U' == c)
+            rmc->navigational = RMC_NAVIGATIONAL_UNSAFE;
+        else if ('V' == c)
+            rmc->navigational = RMC_NAVIGATIONAL_INVALID;
+        else
+        {
+            LOG(LOGLEVEL_ERROR, "rmc navigational status is unknown: 0x%02x !", c);
+            return -1;
+        }
+    }
+    else
+    {
+        LOG(LOGLEVEL_ERROR, "rmc navigational is none !");
+        return -1;
+    }
+
+    return 0;
+}
+
+/* 返回当前语句的末尾 */
 char* nmea_parse(const char *str, nmea_msg_t *msg)
 {
     const char *end;
@@ -482,6 +766,12 @@ char* nmea_parse(const char *str, nmea_msg_t *msg)
     {
         msg->format_id = FORMAT_ID_GGA;
         if (nmea_parse_gga(str, &msg->gga))
+            return NULL;
+    }
+    else if (!memcmp(str, "RMC,", 4))
+    {
+        msg->format_id = FORMAT_ID_RMC;
+        if (nmea_parse_rmc(str, &msg->rmc))
             return NULL;
     }
     else
