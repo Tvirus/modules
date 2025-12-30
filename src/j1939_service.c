@@ -91,6 +91,8 @@ static j1939_msg_cb_info_t j1939_msg_cb_list[J1939_MSG_CB_MAX] = {0};
 static j1939_large_msg_cb_info_t j1939_large_msg_cb_list[J1939_LARGE_MSG_CB_MAX] = {0};
 static j1939_large_msg_tx_info_t j1939_large_msg_tx_list[J1939_LARGE_MSG_TX_MAX] = {0};
 
+static unsigned int recv_error = 0;
+
 
 int j1939_register_msg_cb(const j1939_msg_header_t *header, j1939_msg_cb_t cb)
 {
@@ -153,7 +155,7 @@ int j1939_recv_can_msg(const can_msg_t *msg)
 
     if ((can_msg_tail + 1 == can_msg_head) || ((0 == can_msg_head) && (CAN_MSG_COUNT_MAX - 1 == can_msg_tail)))
     {
-        LOG(LOGLEVEL_ERROR, "recv can msg failed !");
+        recv_error++;
         return -1;
     }
 
@@ -695,6 +697,12 @@ void j1939_task(void)
     if (J1939_TASK_PERIOD > ((unsigned int)(current_ts - last_ts)))
         return;
     last_ts = current_ts;
+
+    if (recv_error)
+    {
+        LOG(LOGLEVEL_ERROR, "receive failed %u times !", recv_error);
+        recv_error = 0;
+    }
 
     /* RX */
     while (can_msg_head != can_msg_tail)
