@@ -14,7 +14,7 @@
 #define M1_CMD_TRANSFER   0xB0
 
 
-int m1_auth(unsigned char sector, unsigned char key_id, unsigned char *key, unsigned char *uid)
+int m1_auth(unsigned char sector, unsigned char key_id, const unsigned char *key, const unsigned char *uid)
 {
     m1_auth_t auth;
 

@@ -202,7 +202,7 @@ int j1939_send_msg(const j1939_msg_header_t *header, const void *data, unsigned 
                          header->src_addr, header->dst_addr, header->pgn, can_header.ExtId, len);
 
     /* 发送邮箱需要配置为fifo模式! */
-    for (i = 0; i < 500; i++)
+    for (i = 0; i < 5000; i++)
     {
         if (0 == HAL_CAN_GetTxMailboxesFreeLevel(&hcan1))
             continue;
@@ -791,12 +791,12 @@ void j1939_task(void)
         }
         else if (J1939_LARGE_MSG_TX_STATE_SENDING == state)
         {
-            if (0 == j1939_large_msg_tx_list[i].interval)
+            if (2 > j1939_large_msg_tx_list[i].interval)
             {
                 for (; cur_packets < total_packets - 1; cur_packets++)
                 {
                     j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7], 7);
-                    HAL_Delay(0);
+                    HAL_Delay(j1939_large_msg_tx_list[i].interval);
                 }
                 j1939_send_tpdt(dst, src, cur_packets + 1, &j1939_large_msg_tx_list[i].data[cur_packets * 7],
                                 j1939_large_msg_tx_list[i].total_bytes - cur_packets * 7);
