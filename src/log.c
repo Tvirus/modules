@@ -1,5 +1,5 @@
 #include "log.h"
-#ifdef ENABLE_LOG_BUFFER
+#ifdef LOG_BUFFER_ENABLE
 #include "ring_buffer.h"
 #endif
 #include <stdarg.h>
@@ -10,14 +10,26 @@
 extern UART_HandleTypeDef huart1;
 #define LOG_UART_HANDLE huart1
 
-#ifdef ENABLE_LOG_BUFFER
+#ifdef LOG_BUFFER_ENABLE
 static unsigned char uart_tx_buf[2000];
 static ring_buffer_t uart_tx_rb = RBUF_INITIALIZER(uart_tx_buf, sizeof(uart_tx_buf), 1);
 #endif
 
 
-#if defined(ENABLE_LOG_BUFFER) && (USE_HAL_UART_REGISTER_CALLBACKS != 0)
+#if defined(LOG_BUFFER_ENABLE) && (USE_HAL_UART_REGISTER_CALLBACKS != 0)
 static void uart_tx_complete_cb(UART_HandleTypeDef *huart)
+{
+    unsigned char *p;
+    unsigned int count;
+
+    count = rbuf_get(&uart_tx_rb, &p, uart_tx_rb.member_count);
+    if (count)
+        HAL_UART_Transmit_DMA(&LOG_UART_HANDLE, p, count * 1);
+}
+#endif
+
+#if defined(LOG_BUFFER_ENABLE) && (USE_HAL_UART_REGISTER_CALLBACKS == 0)
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     unsigned char *p;
     unsigned int count;
@@ -30,7 +42,7 @@ static void uart_tx_complete_cb(UART_HandleTypeDef *huart)
 
 int log_init(void)
 {
-#if defined(ENABLE_LOG_BUFFER) && (USE_HAL_UART_REGISTER_CALLBACKS != 0)
+#if defined(LOG_BUFFER_ENABLE) && (USE_HAL_UART_REGISTER_CALLBACKS != 0)
     if (HAL_OK != HAL_UART_RegisterCallback(&LOG_UART_HANDLE, HAL_UART_TX_COMPLETE_CB_ID, uart_tx_complete_cb))
         return -1;
 #endif
@@ -42,7 +54,7 @@ void log_printf(const char *fmt, ...)
     unsigned char buf[200];
     va_list arg;
     int len;
-#ifdef ENABLE_LOG_BUFFER
+#ifdef LOG_BUFFER_ENABLE
     unsigned char *p;
     unsigned int count;
 #endif
@@ -53,7 +65,7 @@ void log_printf(const char *fmt, ...)
     if (sizeof(buf) <= len)
         len = sizeof(buf) - 1;
 
-#ifdef ENABLE_LOG_BUFFER
+#ifdef LOG_BUFFER_ENABLE
     rbuf_put(&uart_tx_rb, buf, len, 0);
     if (HAL_UART_STATE_READY == LOG_UART_HANDLE.gState)
     {
@@ -62,18 +74,6 @@ void log_printf(const char *fmt, ...)
             HAL_UART_Transmit_DMA(&LOG_UART_HANDLE, p, count * 1);
     }
 #else
-    HAL_UART_Transmit(&LOG_UART_HANDLE, buf, len, len / 2);
+    HAL_UART_Transmit(&LOG_UART_HANDLE, buf, len, (len >> 3) + 4));
 #endif
 }
-
-#if defined(ENABLE_LOG_BUFFER) && (USE_HAL_UART_REGISTER_CALLBACKS == 0)
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-{
-    unsigned char *p;
-    unsigned int count;
-
-    count = rbuf_get(&uart_tx_rb, &p, uart_tx_rb.member_count);
-    if (count)
-        HAL_UART_Transmit_DMA(&LOG_UART_HANDLE, p, count * 1);
-}
-#endif
