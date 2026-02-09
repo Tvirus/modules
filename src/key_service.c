@@ -164,30 +164,32 @@ int key_set_value(unsigned char key_id, signed int value)
         if (key_id != key_state_list[i].key_id)
             continue;
 
-        if ((KEY_TYPE_REL == key_state_list[i].key_type) || (KEY_TYPE_ABS == key_state_list[i].key_type))
+        if (KEY_TYPE_ABS == key_state_list[i].key_type)
         {
             key_state_list[i].new_value = value;
             key_changed = 1;
             return 0;
         }
-        if (KEY_TYPE_BTN == key_state_list[i].key_type)
+        else if (KEY_TYPE_REL == key_state_list[i].key_type)
+        {
+            __disable_irq();
+            key_state_list[i].new_value += value;
+            __enable_irq();
+            key_changed = 1;
+            return 0;
+        }
+        else if (KEY_TYPE_BTN == key_state_list[i].key_type)
         {
             if ((BUTTON_RELEASED != value) && (BUTTON_PRESSED != value))
                 return -1;
+            if (key_state_list[i].new_value == value)
+                return 0;
 
             ts = HAL_GetTick();
             __disable_irq();
-            /* 新值已经设置、处在防抖时间内或者上次的事件还没有处理则直接返回 */
-            if (   (key_state_list[i].new_value == value)
-                || (key_state_list[i].key_cfg.btn_cfg.debounce_delay > (ts - key_state_list[i].last_ts))
-                || (key_state_list[i].new_value != key_state_list[i].old_value))
-            {
-                __enable_irq();
-                return 0;
-            }
             key_state_list[i].new_value = value;
             key_state_list[i].last_ts = ts;
-            if (BUTTON_PRESSED == key_state_list[i].new_value)
+            if (BUTTON_PRESSED == value)
                 key_state_list[i].last_press_ts = ts;
             __enable_irq();
 
@@ -217,19 +219,20 @@ static void do_cb(unsigned char key_id, unsigned char key_type, signed int event
 #define KEY_TASK_PERIOD  10  /* ms */
 void key_task(void)
 {
-    static unsigned int last_ts = 0;
+    static unsigned int task_ts = 0;
     unsigned int current_ts;
     signed int new_value;
     signed int old_value;
     unsigned int last_press_ts;
+    unsigned int last_ts;
     int i;
 
 
     current_ts = HAL_GetTick();
-    if ((0 == key_changed) && (KEY_TASK_PERIOD > ((unsigned int)(current_ts - last_ts))))
+    if ((0 == key_changed) && (KEY_TASK_PERIOD > ((unsigned int)(current_ts - task_ts))))
         return;
     key_changed = 0;
-    last_ts = current_ts;
+    task_ts = current_ts;
 
     for (i = 0; i < KEY_COUNT_MAX; i++)
     {
@@ -242,17 +245,18 @@ void key_task(void)
             if (key_state_list[i].old_value == new_value)
                 continue;
             key_state_list[i].old_value = new_value;
-            do_cb(key_state_list[i].key_id, key_state_list[i].key_type, new_value);
+            do_cb(key_state_list[i].key_id, KEY_TYPE_ABS, new_value);
             continue;
         }
-
         if (KEY_TYPE_REL == key_state_list[i].key_type)
         {
+            __disable_irq();
             new_value = key_state_list[i].new_value;
+            key_state_list[i].new_value = 0;
+            __enable_irq();
             if (0 == new_value)
                 continue;
-            do_cb(key_state_list[i].key_id, key_state_list[i].key_type, new_value);
-            key_state_list[i].new_value = 0;
+            do_cb(key_state_list[i].key_id, KEY_TYPE_REL, new_value);
             continue;
         }
 
@@ -261,12 +265,15 @@ void key_task(void)
         new_value = key_state_list[i].new_value;
         old_value = key_state_list[i].old_value;
         last_press_ts = key_state_list[i].last_press_ts;
+        last_ts = key_state_list[i].last_ts;
         __enable_irq();
+        if ((key_state_list[i].key_cfg.btn_cfg.debounce_delay > ((unsigned int)(HAL_GetTick() - last_ts))))
+            continue;
         key_state_list[i].old_value = new_value;
 
         /* 已产生n次连击且下一次连击已超时 */
         if (   (key_state_list[i].click_state)
-            && (key_state_list[i].key_cfg.btn_cfg.click_interval < (current_ts - last_press_ts)))
+            && (key_state_list[i].key_cfg.btn_cfg.click_interval < (HAL_GetTick() - last_press_ts)))
         {
             if (0 == key_state_list[i].cache_event)
                 do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, key_state_list[i].click_state);
@@ -290,7 +297,7 @@ void key_task(void)
             if ((0 == key_state_list[i].key_cfg.btn_cfg.spt_long_press) || (key_state_list[i].long_press_state))
                 continue;
 
-            if (key_state_list[i].key_cfg.btn_cfg.long_press_threshold < (current_ts - last_press_ts))
+            if (key_state_list[i].key_cfg.btn_cfg.long_press_threshold < (HAL_GetTick() - last_press_ts))
             {
                 do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, BUTTON_EVENT_LONG_PRESS);
                 key_state_list[i].long_press_state = 1;
@@ -321,8 +328,10 @@ void key_task(void)
             if (key_state_list[i].key_cfg.btn_cfg.spt_multiclick > key_state_list[i].click_state)
             {
                 key_state_list[i].click_state++;
-                /* 缓存[支持长按时的第一次按下] */
-                if ((1 == key_state_list[i].click_state) && key_state_list[i].key_cfg.btn_cfg.spt_long_press)
+                /* 缓存支持单击和长按时的第一次按下 */
+                if (   (1 == key_state_list[i].key_cfg.btn_cfg.spt_multiclick)
+                    && (1 == key_state_list[i].click_state)
+                    && key_state_list[i].key_cfg.btn_cfg.spt_long_press)
                     key_state_list[i].cache_event = 1;
                 else
                     key_state_list[i].cache_event = 0;
