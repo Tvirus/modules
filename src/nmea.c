@@ -1,6 +1,7 @@
 #include "nmea.h"
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include "log.h"
 
 
@@ -106,7 +107,7 @@ static char* str_to_int(const char *str, unsigned char exponent, int32_t *out)
     else
         is_negative = 0;
 
-    if (('0' > *str) || ('9' < *str) || (4 < exponent))
+    if ((!isdigit(*str)) || (4 < exponent))
         return NULL;
     factor = 1;
     for (i = 0; i < exponent; i++)
@@ -122,12 +123,12 @@ static char* str_to_int(const char *str, unsigned char exponent, int32_t *out)
     }
     p++;
 
-    if (('0' > *p) || ('9' < *p))
+    if (!isdigit(*p))
         return NULL;
     decimal = 0;
     for (i = 0; i < exponent; i++)
     {
-        if (('0' > *p) || ('9' < *p))
+        if (!isdigit(*p))
             break;
         decimal = decimal * 10 + *p++ - '0';
     }
@@ -138,7 +139,7 @@ static char* str_to_int(const char *str, unsigned char exponent, int32_t *out)
     if (is_negative)
         *out = -(*out);
 
-    while (('0' <= *p) && ('9' >= *p))
+    while (isdigit(*p))
         p++;
     return p;
 }
@@ -153,7 +154,7 @@ static char* str_dm_to_d(const char *dm, unsigned char exponent, int64_t *degree
     char *p = NULL;
     int i;
 
-    if (('0' > *dm) || ('9' < *dm) || (9 < exponent))
+    if ((!isdigit(*dm)) || (9 < exponent))
         return NULL;
     factor = 1;
     for (i = 0; i < exponent; i++)
@@ -167,7 +168,7 @@ static char* str_dm_to_d(const char *dm, unsigned char exponent, int64_t *degree
     p++;
     for (i = 0; i < exponent; i++)
     {
-        if (('0' > *p) || ('9' < *p))
+        if (!isdigit(*p))
             break;
         m2 = m2 * 10 + *p++ - '0';
     }
