@@ -246,18 +246,14 @@ int bq27220_modify_design_capacity(unsigned short cap)
         return -1;
 
     /* 读校验 */
-    bq27220_write_byte(0x3e, 0x9f);
-    HAL_Delay(50);
-    bq27220_write_byte(0x3f, 0x92);
+    bq27220_write_reg(0x3e, 0x929f);
     HAL_Delay(250);
     bq27220_read_byte(REG_MACDATASUM, &old_sum);
     bq27220_read_byte(REG_MACDATALEN, &data_len);
     HAL_Delay(50);
 
     /* 读旧容量 */
-    bq27220_write_byte(0x3e, 0x9f);
-    HAL_Delay(50);
-    bq27220_write_byte(0x3f, 0x92);
+    bq27220_write_reg(0x3e, 0x929f);
     HAL_Delay(250);
     bq27220_read_byte(0x40, &old_dc_msb);
     bq27220_read_byte(0x41, &old_dc_lsb);
@@ -266,17 +262,14 @@ int bq27220_modify_design_capacity(unsigned short cap)
     /* 写新容量 */
     new_dc_msb = (cap >> 8) & 0xff;
     new_dc_lsb = cap & 0xff;
-    bq27220_write_byte(0x3e, 0x9f);
-    HAL_Delay(50);
-    bq27220_write_byte(0x3f, 0x92);
+    bq27220_write_reg(0x3e, 0x929f);
     HAL_Delay(250);
-    bq27220_write_byte(0x40, new_dc_msb);
-    HAL_Delay(50);
-    bq27220_write_byte(0x41, new_dc_lsb);
+    bq27220_write_reg(0x40, (new_dc_lsb << 8) | new_dc_msb);  /* 先发msb */
     HAL_Delay(250);
 
     /* 写校验 */
-    bq27220_write_byte(REG_MACDATASUM, 255 - (255 - old_sum - old_dc_msb - old_dc_lsb + new_dc_msb + new_dc_lsb));
+    //bq27220_write_byte(REG_MACDATASUM, 255 - (255 - old_sum - old_dc_msb - old_dc_lsb + new_dc_msb + new_dc_lsb));
+    bq27220_write_byte(REG_MACDATASUM, old_sum + old_dc_msb + old_dc_lsb - new_dc_msb - new_dc_lsb);
     HAL_Delay(50);
     bq27220_write_byte(REG_MACDATALEN, data_len);
     HAL_Delay(250);
