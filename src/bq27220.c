@@ -1,6 +1,5 @@
 #include "bq27220.h"
 #include "log.h"
-#include "main.h"
 #include "stm32u5xx_hal.h"
 
 
@@ -138,154 +137,196 @@ static int bq27220_write_byte(unsigned char reg, unsigned char value)
     return 0;
 }
 
-static int enter_config_update(void)
+static int bq27220_unseal(void)
+{
+    unsigned short operation_status = SEC1 | SEC0;
+    int i;
+
+    bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
+    if ((SEC1 | SEC0) != (operation_status & (SEC1 | SEC0)))
+    {
+        LOG(LOGLEVEL_DEBUG, "UNSEAL OK");
+        return 0;
+    }
+    for (i = 0; i < 4; i++)
+    {
+        if (i)
+        {
+            bq27220_write_reg(REG_CONTROL, CTRL_RESET);
+            HAL_Delay(1000);
+        }
+        bq27220_write_reg(REG_CONTROL, UNSEAL_KEY1);
+        HAL_Delay(10);
+        bq27220_write_reg(REG_CONTROL, UNSEAL_KEY2);
+        HAL_Delay(20);
+
+        bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
+        if ((SEC1 | SEC0) != (operation_status & (SEC1 | SEC0)))
+        {
+            LOG(LOGLEVEL_DEBUG, "UNSEAL OK(%d)", i);
+            return 0;
+        }
+    }
+    LOG(LOGLEVEL_ERROR, "UNSEAL failed !");
+    return -1;
+}
+static int bq27220_seal(void)
 {
     unsigned short operation_status = 0;
     int i;
 
-    /* UNSEAL */
+    bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
+    if ((SEC1 | SEC0) == (operation_status & (SEC1 | SEC0)))
+    {
+        LOG(LOGLEVEL_DEBUG, "SEAL OK");
+        return 0;
+    }
     for (i = 0; i < 4; i++)
     {
+        bq27220_write_reg(REG_CONTROL, CTRL_SEALED);
+        HAL_Delay(20);
+
         bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
         if ((SEC1 | SEC0) == (operation_status & (SEC1 | SEC0)))
         {
-            if (i)
-            {
-                bq27220_write_reg(REG_CONTROL, CTRL_RESET);
-                HAL_Delay(1000);
-            }
-            bq27220_write_reg(REG_CONTROL, UNSEAL_KEY1);
-            HAL_Delay(30);
-            bq27220_write_reg(REG_CONTROL, UNSEAL_KEY2);
-            HAL_Delay(300);
-        }
-        else
-        {
-            break;
+            LOG(LOGLEVEL_DEBUG, "SEAL OK(%d)", i);
+            return 0;
         }
     }
-    if (4 <= i)
-    {
-        LOG(LOGLEVEL_ERROR, "UNSEAL failed !");
-        return -1;
-    }
-    LOG(LOGLEVEL_DEBUG, "UNSEAL OK(%d)", i);
-
-    /* FULL ACCESS */
-    if (SEC0 != (operation_status & (SEC1 | SEC0)))
-    {
-        bq27220_write_reg(REG_CONTROL, 0xffff);
-        HAL_Delay(30);
-        bq27220_write_reg(REG_CONTROL, 0xffff);
-        HAL_Delay(300);
-    }
-    bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
-    if (SEC0 != (operation_status & (SEC1 | SEC0)))
-    {
-        LOG(LOGLEVEL_ERROR, "FULL ACCESS failed !");
-        return -1;
-    }
-    LOG(LOGLEVEL_DEBUG, "FULL ACCESS OK");
-
-    /* CONFIG UPDATE */
-    bq27220_write_reg(REG_CONTROL, CTRL_ENTER_CFG_UPDATE);
-    for (i = 0; i < 40; i++)
-    {
-        HAL_Delay(50);
-        bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
-        if (operation_status & CFGUPDATE)
-            break;
-    }
-    if (40 <= i)
-    {
-        LOG(LOGLEVEL_ERROR, "enter CONFIG UPDATE failed !");
-        return -1;
-    }
-    LOG(LOGLEVEL_DEBUG, "enter CONFIG UPDATE OK(%d)", i);
-    return 0;
+    LOG(LOGLEVEL_ERROR, "SEAL failed !");
+    return -1;
 }
-static int exit_config_update(void)
+static int bq27220_full_access(void)
 {
     unsigned short operation_status = 0;
     int i;
 
-    /* 退出 CONFIG UPDATE */
-    bq27220_write_reg(REG_CONTROL, CTRL_EXIT_CFG_UPDATE_REINIT);
-    for (i = 0; i < 50; i++)
+    bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
+    if (SEC0 == (operation_status & (SEC1 | SEC0)))
     {
+        LOG(LOGLEVEL_DEBUG, "FULL ACCESS OK");
+        return 0;
+    }
+    for (i = 0; i < 4; i++)
+    {
+        bq27220_write_reg(REG_CONTROL, 0xffff);
+        HAL_Delay(20);
+        bq27220_write_reg(REG_CONTROL, 0xffff);
+        HAL_Delay(20);
+
+        bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
+        if (SEC0 == (operation_status & (SEC1 | SEC0)))
+        {
+            LOG(LOGLEVEL_DEBUG, "FULL ACCESS OK(%d)", i);
+            return 0;
+        }
+    }
+    LOG(LOGLEVEL_ERROR, "FULL ACCESS failed !");
+    return -1;
+}
+static int bq27220_enter_config_update(void)
+{
+    unsigned short operation_status = 0;
+    int i;
+
+    bq27220_write_reg(REG_CONTROL, CTRL_ENTER_CFG_UPDATE);
+    for (i = 0; i < 100; i++)
+    {
+        HAL_Delay(10);
+        bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
+        if (operation_status & CFGUPDATE)
+        {
+            LOG(LOGLEVEL_DEBUG, "enter CONFIG UPDATE OK(%d)", i);
+            return 0;
+        }
+    }
+    LOG(LOGLEVEL_ERROR, "enter CONFIG UPDATE failed !");
+    return -1;
+}
+static int bq27220_exit_config_update(void)
+{
+    unsigned short operation_status = CFGUPDATE;
+    int i;
+
+    bq27220_write_reg(REG_CONTROL, CTRL_EXIT_CFG_UPDATE_REINIT);
+    for (i = 0; i < 100; i++)
+    {
+        HAL_Delay(10);
         bq27220_read_reg(REG_OPERATIONSTATUS, &operation_status);
         if (!(operation_status & CFGUPDATE))
-            break;
-        HAL_Delay(20);
+        {
+            LOG(LOGLEVEL_DEBUG, "exit CONFIG UPDATE OK(%d)", i);
+            return 0;
+        }
     }
-    if (50 <= i)
-    {
-        LOG(LOGLEVEL_ERROR, "exit CONFIG UPDATE failed !");
-        return -1;
-    }
-    LOG(LOGLEVEL_DEBUG, "exit CONFIG UPDATE OK(%d)", i);
-
-    /* SEALED */
-    bq27220_write_reg(REG_CONTROL, CTRL_SEALED);
-    HAL_Delay(250);
-    return 0;
+    LOG(LOGLEVEL_ERROR, "exit CONFIG UPDATE failed !");
+    return -1;
 }
 
-int bq27220_modify_design_capacity(unsigned short cap)
+int bq27220_modify_ram(unsigned short list[][2], unsigned int count)
 {
     unsigned char old_sum = 0;
     unsigned char data_len = 0;
-    unsigned char old_dc_msb = 0;
-    unsigned char old_dc_lsb = 0;
-    unsigned char new_dc_msb = 0;
-    unsigned char new_dc_lsb = 0;
-    unsigned short design_capacity = 0;
+    unsigned char old_msb = 0;
+    unsigned char old_lsb = 0;
+    unsigned char new_msb = 0;
+    unsigned char new_lsb = 0;
+    unsigned int i;
 
-
-    if (enter_config_update())
+    if (bq27220_unseal())
+        return -1;
+    if (bq27220_full_access())
+        return -1;
+    if (bq27220_enter_config_update())
         return -1;
 
-    /* 读校验 */
-    bq27220_write_reg(0x3e, 0x929f);
-    HAL_Delay(250);
-    bq27220_read_byte(REG_MACDATASUM, &old_sum);
-    bq27220_read_byte(REG_MACDATALEN, &data_len);
-    HAL_Delay(50);
-
-    /* 读旧容量 */
-    bq27220_write_reg(0x3e, 0x929f);
-    HAL_Delay(250);
-    bq27220_read_byte(0x40, &old_dc_msb);
-    bq27220_read_byte(0x41, &old_dc_lsb);
-    HAL_Delay(50);
-
-    /* 写新容量 */
-    new_dc_msb = (cap >> 8) & 0xff;
-    new_dc_lsb = cap & 0xff;
-    bq27220_write_reg(0x3e, 0x929f);
-    HAL_Delay(250);
-    bq27220_write_reg(0x40, (new_dc_lsb << 8) | new_dc_msb);  /* 先发msb */
-    HAL_Delay(250);
-
-    /* 写校验 */
-    //bq27220_write_byte(REG_MACDATASUM, 255 - (255 - old_sum - old_dc_msb - old_dc_lsb + new_dc_msb + new_dc_lsb));
-    bq27220_write_byte(REG_MACDATASUM, old_sum + old_dc_msb + old_dc_lsb - new_dc_msb - new_dc_lsb);
-    HAL_Delay(50);
-    bq27220_write_byte(REG_MACDATALEN, data_len);
-    HAL_Delay(250);
-
-    if (exit_config_update())
-        return -1;
-
-    bq27220_read_reg(REG_DESIGNCAPACITY, &design_capacity);
-    if (cap == design_capacity)
+    for (i = 0; i < count; i++)
     {
-        LOG(LOGLEVEL_INFO, "modify design capacity to %u OK", cap);
-        return 0;
+        /* 读校验 */
+        bq27220_write_reg(0x3e, list[i][0]);
+        HAL_Delay(20);
+        bq27220_read_byte(REG_MACDATASUM, &old_sum);
+        bq27220_read_byte(REG_MACDATALEN, &data_len);
+        HAL_Delay(20);
+
+        /* 读旧值 */
+        bq27220_write_reg(0x3e, list[i][0]);
+        HAL_Delay(20);
+        bq27220_read_byte(0x40, &old_msb);
+        bq27220_read_byte(0x41, &old_lsb);
+        HAL_Delay(20);
+
+        /* 写新值 */
+        bq27220_write_reg(0x3e, list[i][0]);
+        HAL_Delay(20);
+        new_msb = (list[i][1] >> 8) & 0xff;
+        new_lsb = list[i][1] & 0xff;
+        bq27220_write_reg(0x40, (new_lsb << 8) | new_msb);  /* 此处先发msb */
+        HAL_Delay(20);
+
+        /* 写校验 */
+        bq27220_write_byte(REG_MACDATASUM, old_sum + old_msb + old_lsb - new_msb - new_lsb);
+        HAL_Delay(20);
+        bq27220_write_byte(REG_MACDATALEN, data_len);
+        HAL_Delay(20);
     }
-    else
-    {
-        LOG(LOGLEVEL_ERROR, "modify design capacity to %u failed !", cap);
+
+    if (bq27220_exit_config_update())
         return -1;
-    }
+    if (bq27220_seal())
+        return -1;
+
+    return 0;
 }
+
+/**
+static unsigned short ram_list[][2] =
+{
+    {0x929d, 10000},
+    {0x929f, 10000}
+};
+#define RAM_LIST_COUNT  (sizeof(ram_list) / sizeof(ram_list[0]))
+
+    bq27220_modify_ram(ram_list, RAM_LIST_COUNT);
+    HAL_Delay(1000);
+*/
