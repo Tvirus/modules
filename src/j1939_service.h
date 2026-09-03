@@ -2,6 +2,9 @@
 #define _J1939_SERVICE_H_
 
 
+#include <stdint.h>
+
+
 #define J1939_DEFUALT_PRIORITY  0x06
 #define J1939_DEFUALT_CONTROL_PRIORITY  0x03
 
@@ -25,8 +28,8 @@
 
 typedef struct
 {
-    unsigned char pgn[3];
-}j1939_rqst_t;
+    uint8_t pgn[3];
+} j1939_rqst_t;
 
 
 #define J1939_ACKM_CONTROL_POSITIVE             0
@@ -48,12 +51,12 @@ typedef struct
 #define J1939_ACKM_CONTROL_REQ2_3BYTE_IGNORE  255
 typedef struct
 {
-    unsigned char control;
-    unsigned char group_fun;
-    unsigned char rsv[2];  /* 0xFF */
-    unsigned char ori_addr;
-    unsigned char pgn[3];
-}j1939_ackm_t;
+    uint8_t control;
+    uint8_t group_fun;
+    uint8_t rsv[2];  /* 0xFF */
+    uint8_t ori_addr;
+    uint8_t pgn[3];
+} j1939_ackm_t;
 
 
 #define J1939_TPCM_CONTROL_RTS    0x10
@@ -63,30 +66,30 @@ typedef struct
 #define J1939_TPCM_CONTROL_ABORT  0xFF
 typedef struct
 {
-    unsigned char control;  /* J1939_TPCM_CONTROL_RTS  0x10 */
-    unsigned char total_bytes[2];
-    unsigned char total_packets;
-    unsigned char max_packets;
-    unsigned char pgn[3];
-}j1939_tpcm_rts_t;
+    uint8_t control;  /* J1939_TPCM_CONTROL_RTS  0x10 */
+    uint8_t total_bytes[2];
+    uint8_t total_packets;
+    uint8_t max_packets;
+    uint8_t pgn[3];
+} j1939_tpcm_rts_t;
 
 typedef struct
 {
-    unsigned char control;  /* J1939_TPCM_CONTROL_CTS  0x11 */
-    unsigned char max_packets;
-    unsigned char next_packet;
-    unsigned char rsv[2];  /* 0xFF */
-    unsigned char pgn[3];
-}j1939_tpcm_cts_t;
+    uint8_t control;  /* J1939_TPCM_CONTROL_CTS  0x11 */
+    uint8_t max_packets;
+    uint8_t next_packet;
+    uint8_t rsv[2];  /* 0xFF */
+    uint8_t pgn[3];
+} j1939_tpcm_cts_t;
 
 typedef struct
 {
-    unsigned char control;  /* J1939_TPCM_CONTROL_ACK  0x13 */
-    unsigned char total_bytes[2];
-    unsigned char total_packets;
-    unsigned char rsv;  /* 0xFF */
-    unsigned char pgn[3];
-}j1939_tpcm_ack_t;
+    uint8_t control;  /* J1939_TPCM_CONTROL_ACK  0x13 */
+    uint8_t total_bytes[2];
+    uint8_t total_packets;
+    uint8_t rsv;  /* 0xFF */
+    uint8_t pgn[3];
+} j1939_tpcm_ack_t;
 
 #define J1939_TPCM_ABORT_REASON_CONN_EXISTS      1
 #define J1939_TPCM_ABORT_REASON_SYSTEM           2
@@ -103,60 +106,60 @@ typedef struct
 #define J1939_TPCM_ABORT_ROLE_NULL  3
 typedef struct
 {
-    unsigned char control;  /* J1939_TPCM_CONTROL_ABORT  0xFF */
-    unsigned char reason;
-    unsigned char role;
-    unsigned char rsv[2];  /* 0xFF */
-    unsigned char pgn[3];
-}j1939_tpcm_abort_t;
+    uint8_t control;  /* J1939_TPCM_CONTROL_ABORT  0xFF */
+    uint8_t reason;
+    uint8_t role;
+    uint8_t rsv[2];  /* 0xFF */
+    uint8_t pgn[3];
+} j1939_tpcm_abort_t;
 
 
 typedef struct
 {
-    unsigned char seq_num;
-    unsigned char data[7];
-}j1939_tpdt_t;
+    uint8_t seq_num;
+    uint8_t data[7];
+} j1939_tpdt_t;
 
 
 
 
 typedef struct
 {
-    unsigned char chn;
-    unsigned char ide;  /* id扩展 */
+    uint8_t chn;
+    uint8_t ide;  /* id扩展 */
     union
     {
-        unsigned char base_id[2];
-        unsigned char extension_id[4];
+        uint8_t base_id[2];
+        uint8_t extension_id[4];
     };
-    unsigned char rtr;  /* 远程传输请求 */
-    unsigned char dlc;  /* 数据长度 */
-    unsigned char data[8];
-}can_msg_t;
+    uint8_t rtr;  /* 远程传输请求 */
+    uint8_t dlc;  /* 数据长度 */
+    uint8_t data[8];
+} can_msg_t;
 
 
 typedef struct
 {
-    unsigned int pgn;
-    unsigned char priority;
-    unsigned char ext_data_page;
-    unsigned char dst_addr;
-    unsigned char src_addr;
-}j1939_msg_header_t;
+    uint32_t pgn;
+    uint8_t priority;
+    uint8_t ext_data_page;
+    uint8_t dst_addr;
+    uint8_t src_addr;
+} j1939_msg_header_t;
 
 
-typedef int (*j1939_msg_cb_t)(const j1939_msg_header_t *header, const unsigned char *data, unsigned int len);
+typedef int (*j1939_msg_cb_t)(unsigned int chn, const j1939_msg_header_t *header, const unsigned char *data, unsigned int len);
 
 
-extern void j1939_task(void);
-extern int j1939_recv_can_msg(const can_msg_t *msg);
-extern int j1939_send_msg(const j1939_msg_header_t *header, const void *data, unsigned char len);
-extern int j1939_send_rqst(const j1939_msg_header_t *header);
-extern int j1939_send_ackm(const j1939_msg_header_t *header, unsigned char ack, unsigned char group_fun, unsigned char ori_addr);
-extern int j1939_register_msg_cb(const j1939_msg_header_t *header, j1939_msg_cb_t cb);
-extern int j1939_register_large_msg_cb(const j1939_msg_header_t *header, void *buf, unsigned int size, j1939_msg_cb_t cb);
-extern int j1939_create_large_msg_sending(const j1939_msg_header_t *header, const void *data, unsigned int len, unsigned int interval);
-extern int j1939_destroy_large_msg_sending(int handle);
+void j1939_task(void);
+int j1939_recv_can_msg(const can_msg_t *msg);
+int j1939_send_msg(unsigned int chn, const j1939_msg_header_t *header, const void *data, unsigned char len);
+int j1939_send_rqst(unsigned int chn, const j1939_msg_header_t *header);
+int j1939_send_ackm(unsigned int chn, const j1939_msg_header_t *header, unsigned char ack, unsigned char group_fun, unsigned char ori_addr);
+int j1939_register_msg_cb(unsigned int chn, const j1939_msg_header_t *header, j1939_msg_cb_t cb);
+int j1939_register_large_msg_cb(unsigned int chn, const j1939_msg_header_t *header, void *buf, unsigned int size, j1939_msg_cb_t cb);
+int j1939_create_large_msg_sending(unsigned int chn, const j1939_msg_header_t *header, const void *data, unsigned int len, unsigned int interval);
+int j1939_destroy_large_msg_sending(int handle);
 
 #define J1939_LARGE_MSG_TX_STATE_WAIT_RTS    0
 #define J1939_LARGE_MSG_TX_STATE_WAIT_CTS    1
@@ -173,7 +176,7 @@ extern int j1939_destroy_large_msg_sending(int handle);
                                             || (J1939_LARGE_MSG_TX_STATE_ERROR   == (state)) \
                                             || (J1939_LARGE_MSG_TX_STATE_ABORT   == (state)) \
                                             || (J1939_LARGE_MSG_TX_STATE_TIMEOUT == (state)))
-extern int j1939_get_large_msg_sending_state(int handle);
+int j1939_get_large_msg_sending_state(int handle);
 
 
 #endif
