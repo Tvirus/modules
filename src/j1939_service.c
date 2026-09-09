@@ -304,6 +304,8 @@ int j1939_send_tpcm_abort(unsigned int chn, unsigned int pgn, unsigned char dst,
     abort.control = J1939_TPCM_CONTROL_ABORT;
     abort.reason = reason;
     abort.role = role & 0x03;
+    abort.rsv[0] = 0xff;
+    abort.rsv[1] = 0xff;
     abort.pgn[0] = pgn & 0xff;
     abort.pgn[1] = (pgn >> 8) & 0xff;
     abort.pgn[2] = (pgn >> 16) & 0xff;
@@ -568,12 +570,14 @@ static void handle_tpcm_cts(unsigned int chn, const j1939_msg_header_t *header, 
 static void handle_tpcm_ack(unsigned int chn, const j1939_msg_header_t *header, const unsigned char *data, unsigned int len)
 {
     j1939_tpcm_ack_t *tpcm_ack = (j1939_tpcm_ack_t *)data;
+    unsigned int total_bytes;
     uint32_t pgn;
     int i;
 
     if ((J1939_PGN_TPCM != header->pgn) || (8 != len) || (J1939_TPCM_CONTROL_ACK != data[0]))
         return;
 
+    total_bytes = tpcm_ack->total_bytes[0] | (tpcm_ack->total_bytes[1] << 8);
     pgn = tpcm_ack->pgn[0] | (tpcm_ack->pgn[1] << 8) | (tpcm_ack->pgn[2] << 16);
     for (i = 0; i < J1939_LARGE_MSG_TX_MAX; i++)
     {
@@ -585,12 +589,15 @@ static void handle_tpcm_ack(unsigned int chn, const j1939_msg_header_t *header, 
             continue;
 
         LOG_INFO("Recv tpcm_ack: chn %u [%02X->%02X] PGN:%06x, size:%u packets:%u, state:%u",
-                 chn, header->src_addr, header->dst_addr, pgn, tpcm_ack->total_bytes[0] | tpcm_ack->total_bytes[1] << 8,
-                 tpcm_ack->total_packets, j1939_large_msg_tx_list[i].state);
+                 chn, header->src_addr, header->dst_addr, pgn, total_bytes, tpcm_ack->total_packets, j1939_large_msg_tx_list[i].state);
         if ((J1939_LARGE_MSG_TX_STATE_WAIT_ACK != j1939_large_msg_tx_list[i].state))
             continue;
 
-        j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_SUCCESS;
+        if (   (j1939_large_msg_tx_list[i].total_bytes != total_bytes)
+            || (j1939_large_msg_tx_list[i].total_packets != tpcm_ack->total_packets))
+            j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_ERROR;
+        else
+            j1939_large_msg_tx_list[i].state = J1939_LARGE_MSG_TX_STATE_SUCCESS;
     }
 }
 
