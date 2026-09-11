@@ -354,9 +354,11 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
             emsg_conn_list[conn_id].decoder_state.errors++;
             continue;
         }
-        if (EMSG_DEVICE_ADDR_LOCAL == header->src)
+        if (   (local_device_addr == header->src)
+            || (EMSG_DEVICE_ADDR_LOCAL == header->src)
+            || (EMSG_DEVICE_ADDR_LOCAL == header->dst))
         {
-            LOG(LOGLEVEL_ERROR, "conn(%u) recv msg failed, src_addr cannot be LOCAL_ADDR(%u) !\n", conn_id, EMSG_DEVICE_ADDR_LOCAL);
+            LOG(LOGLEVEL_ERROR, "conn(%u) recv msg addr invalid, src_addr:%u dst_addr:%u !\n", conn_id, header->src, header->dst);
             decoded_len = (((uint8_t *)header)[decoded_len - 1] == EMSG_SOF_1)? 1: 0;
             continue;
         }
