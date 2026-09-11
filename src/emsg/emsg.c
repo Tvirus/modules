@@ -74,6 +74,8 @@ uint8_t emsg_log_level = LOGLEVEL_ERROR;
 static emsg_conn_t emsg_conn_list[EMSG_CONN_CFG_COUNT] = {0};
 static emsg_cb_info_t emsg_cb_list[EMSG_CB_MAX] = {0};
 
+static int do_send_msg(uint8_t src_addr, uint8_t dst_addr, uint16_t msg_id, const void *data, size_t len);
+
 
 int emsg_init(void)
 {
@@ -369,7 +371,7 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
         else
         {
             LOG(LOGLEVEL_INFO, "do route:\n");
-            emsg_send(header->dst, msg_id, header->payload, payload_len);
+            do_send_msg(header->src, header->dst, msg_id, header->payload, payload_len);
         }
     }
 
@@ -430,7 +432,7 @@ static uint32_t escape_encode(uint8_t *state, const uint8_t *src, uint32_t src_l
     return (uint32_t)(_dst - dst);
 }
 
-int emsg_send(uint8_t dst_addr, uint16_t msg_id, const void *data, size_t len)
+static int do_send_msg(uint8_t src_addr, uint8_t dst_addr, uint16_t msg_id, const void *data, size_t len)
 {
     uint8_t buf[EMSG_ENCODE_LEN_MAX];
     emsg_header_t header;
@@ -452,15 +454,15 @@ int emsg_send(uint8_t dst_addr, uint16_t msg_id, const void *data, size_t len)
 
     if ((EMSG_DEVICE_ADDR_LOCAL == dst_addr) || (local_device_addr == dst_addr))
     {
-        LOG(LOGLEVEL_INFO, "send local msg, src:%u dst:%u id:%u len:%zu\n", local_device_addr, dst_addr, msg_id, len);
+        LOG(LOGLEVEL_INFO, "send local msg, src:%u dst:%u id:%u len:%zu\n", src_addr, dst_addr, msg_id, len);
         do_msg_cb(EMSG_DEVICE_ADDR_LOCAL, msg_id, data, (uint16_t)len);
         return 0;
     }
-    LOG(LOGLEVEL_INFO, "send msg, src:%u dst:%u id:%u len:%zu\n", local_device_addr, dst_addr, msg_id, len);
+    LOG(LOGLEVEL_INFO, "send msg, src:%u dst:%u id:%u len:%zu\n", src_addr, dst_addr, msg_id, len);
 
     header.sof[0] = EMSG_SOF_1;
     header.sof[1] = EMSG_SOF_2;
-    header.src = local_device_addr;
+    header.src = src_addr;
     header.dst = dst_addr;
     header.msg_id[0] = msg_id >> 8;
     header.msg_id[1] = msg_id & 0xff;
@@ -521,7 +523,11 @@ int emsg_send(uint8_t dst_addr, uint16_t msg_id, const void *data, size_t len)
             return 0;
         }
     }
-
     LOG(LOGLEVEL_ERROR, "send failed, dst addr(%u) is not configured !\n", dst_addr);
     return -1;
+}
+
+int emsg_send(uint8_t dst_addr, uint16_t msg_id, const void *data, size_t len)
+{
+    return do_send_msg(local_device_addr, dst_addr, msg_id, data, len);
 }
