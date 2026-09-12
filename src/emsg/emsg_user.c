@@ -57,7 +57,7 @@ void uart3_irq_handler(void)
     if (huart3.ErrorCode)
     {
         if (huart3.ErrorCode & HAL_UART_ERROR_RTO)
-            rbuf_put(&uart3_rx_rbuf, uart3_rx_dma_buf, sizeof(uart3_rx_dma_buf) - __HAL_DMA_GET_COUNTER(&hdma_usart3_rx);
+            rbuf_put(&uart3_rx_rbuf, uart3_rx_dma_buf, sizeof(uart3_rx_dma_buf) - __HAL_DMA_GET_COUNTER(&hdma_usart3_rx), 0);
         HAL_UART_Receive_DMA(&huart3, uart3_rx_dma_buf, sizeof(uart3_rx_dma_buf));
     }
 }

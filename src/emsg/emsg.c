@@ -207,6 +207,10 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
                     escape_state = 0;
                     msg_len = 0;
                 }
+                else if (EMSG_SOF_1 == _data)
+                {
+                    /* decoded_len = 1; */
+                }
                 else
                 {
                     decoded_len = 0;
