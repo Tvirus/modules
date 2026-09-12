@@ -32,7 +32,12 @@
 #define LOGLEVEL_ERROR  1
 #define LOGLEVEL_INFO   2
 #define LOGLEVEL_DEBUG  3
-#define LOG(level, fmt, arg...)  do{if((level) <= emsg_log_level)log_printf("--EMSG-- " fmt, ##arg);}while(0)
+#define LOG_ERROR(fmt, arg...)  do{if((LOGLEVEL_ERROR) <= (emsg_log_level))log_printf("--EMSG-- " fmt "\n", ##arg);}while(0)
+#define LOG_INFO(fmt, arg...)   do{if((LOGLEVEL_INFO)  <= (emsg_log_level))log_printf("--EMSG-- " fmt "\n", ##arg);}while(0)
+#define LOG_DEBUG(fmt, arg...)  do{if((LOGLEVEL_DEBUG) <= (emsg_log_level))log_printf("--EMSG-- " fmt "\n", ##arg);}while(0)
+#define LOG_PRINT(fmt, arg...)  do{log_printf(fmt, ##arg);}while(0)
+unsigned int emsg_log_level = LOGLEVEL_ERROR;
+
 
 #define EMSG_SOF_1        0xaa
 #define EMSG_SOF_2        0x55
@@ -49,7 +54,7 @@ typedef struct
     uint8_t escape_state;
     uint8_t pad;
     uint16_t errors;
-}decoder_state_t;
+} decoder_state_t;
 typedef struct
 {
     uint8_t dst_addr;
@@ -59,7 +64,7 @@ typedef struct
     uint8_t decode_buf[EMSG_MSG_LEN_MAX];
     emsg_sender_t sender;
     decoder_state_t decoder_state;
-}emsg_conn_t;
+} emsg_conn_t;
 
 typedef struct
 {
@@ -67,9 +72,8 @@ typedef struct
     uint16_t msg_id;
     uint8_t local_only;
     uint8_t pad;
-}emsg_cb_info_t;
+} emsg_cb_info_t;
 
-uint8_t emsg_log_level = LOGLEVEL_ERROR;
 
 static emsg_conn_t emsg_conn_list[EMSG_CONN_CFG_COUNT] = {0};
 static emsg_cb_info_t emsg_cb_list[EMSG_CB_MAX] = {0};
@@ -83,10 +87,10 @@ int emsg_init(void)
 
     for (i = 0; i < EMSG_CONN_CFG_COUNT; i++)
     {
-        if (EMSG_DEVICE_ADDR_LOCAL == emsg_conn_cfg_list[i].dst_addr)
+        if (   (EMSG_DEVICE_ADDR_LOCAL == emsg_conn_cfg_list[i].dst_addr)
+            || (local_device_addr == emsg_conn_cfg_list[i].dst_addr))
         {
-            LOG(LOGLEVEL_ERROR, "conn(%u) dst_addr cannot be LOCAL_ADDR(%u or %u) !",
-                i, EMSG_DEVICE_ADDR_LOCAL, local_device_addr);
+            LOG_ERROR("Conn(%u) dst_addr(%u) invalid, must not be a local address", i, emsg_conn_cfg_list[i].dst_addr);
             return -1;
         }
         emsg_conn_list[i].dst_addr = emsg_conn_cfg_list[i].dst_addr;
@@ -125,7 +129,7 @@ int emsg_register_cb(uint16_t msg_id, emsg_cb_t cb, uint8_t local_only)
         return 0;
     }
 
-    LOG(LOGLEVEL_ERROR, "register cb failed, count exceeds the max(%u) !\n", EMSG_CB_MAX);
+    LOG_ERROR("Register cb failed, increase EMSG_CB_MAX(%u)", EMSG_CB_MAX);
     return -1;
 }
 
@@ -172,10 +176,10 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
 
     if (LOGLEVEL_DEBUG <= emsg_log_level)
     {
-        LOG(LOGLEVEL_DEBUG, "conn(%d) recv msg(%zu): ", conn_id, len);
+        LOG_PRINT("--EMSG-- Conn(%d) recv msg(%zu): ", conn_id, len);
         for (i = 0; i < len; i++)
-            log_printf("%02x ", ((uint8_t *)data)[i]);
-        log_printf("\n");
+            LOG_PRINT("%02x ", ((uint8_t *)data)[i]);
+        LOG_PRINT("\n");
     }
 
     decoded_len  = emsg_conn_list[conn_id].decoder_state.decoded_len;
@@ -317,7 +321,7 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
                 payload_len = (header->len[0] << 8) | header->len[1];
                 if (EMSG_PAYLOAD_LEN_MAX < payload_len)
                 {
-                    LOG(LOGLEVEL_ERROR, "payload len(%u) exceeds the max(%u), ignore this msg !", payload_len, EMSG_PAYLOAD_LEN_MAX);
+                    LOG_ERROR("Payload len(%u) exceeds the max(%u), ignore this msg", payload_len, EMSG_PAYLOAD_LEN_MAX);
                     decoded_len = (((uint8_t *)header)[decoded_len - 1] == EMSG_SOF_1)? 1: 0;
                     emsg_conn_list[conn_id].decoder_state.errors++;
                     continue;
@@ -334,17 +338,17 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
 
         if (LOGLEVEL_DEBUG <= emsg_log_level)
         {
-            LOG(LOGLEVEL_DEBUG, "    header: ");
+            LOG_PRINT("--EMSG--     header: ");
             for (i = 0; i < sizeof(emsg_header_t); i++)
-                log_printf("%02x ", ((uint8_t *)header)[i]);
-            log_printf("\n");
+                LOG_PRINT("%02x ", ((uint8_t *)header)[i]);
+            LOG_PRINT("\n");
 
-            LOG(LOGLEVEL_DEBUG, "    data  : ");
+            LOG_PRINT("--EMSG--     data  : ");
             for (i = 0; i < payload_len; i++)
-                log_printf("%02x ", header->payload[i]);
-            log_printf("\n");
+                LOG_PRINT("%02x ", header->payload[i]);
+            LOG_PRINT("\n");
 
-            LOG(LOGLEVEL_DEBUG, "    crc   : %02x %02x %02x %02x\n", pcrc[0], pcrc[1], pcrc[2], pcrc[3]);
+            LOG_PRINT("--EMSG--     crc   : %02x %02x %02x %02x\n", pcrc[0], pcrc[1], pcrc[2], pcrc[3]);
         }
 
         crc = crc32_cksum(NULL, header, msg_len - 4);
@@ -353,7 +357,7 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
             || (pcrc[2] != ((crc >> 8) & 0xff))
             || (pcrc[3] != (crc & 0xff)))
         {
-            LOG(LOGLEVEL_ERROR, "conn(%u) recv msg crc error !\n", conn_id);
+            LOG_ERROR("Conn(%u) recv msg crc invalid", conn_id);
             decoded_len = (((uint8_t *)header)[decoded_len - 1] == EMSG_SOF_1)? 1: 0;
             emsg_conn_list[conn_id].decoder_state.errors++;
             continue;
@@ -362,13 +366,13 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
             || (EMSG_DEVICE_ADDR_LOCAL == header->src)
             || (EMSG_DEVICE_ADDR_LOCAL == header->dst))
         {
-            LOG(LOGLEVEL_ERROR, "conn(%u) recv msg addr invalid, src_addr:%u dst_addr:%u !\n", conn_id, header->src, header->dst);
+            LOG_ERROR("Conn(%u) recv msg addr invalid, src_addr:%u dst_addr:%u", conn_id, header->src, header->dst);
             decoded_len = (((uint8_t *)header)[decoded_len - 1] == EMSG_SOF_1)? 1: 0;
             continue;
         }
 
         msg_id = (header->msg_id[0] << 8) | header->msg_id[1];
-        LOG(LOGLEVEL_INFO, "recv msg, src:%u dst:%u id:%u len:%u\n", header->src, local_device_addr, msg_id, payload_len);
+        LOG_INFO("Conn(%u) recv msg, src:%u dst:%u id:%u len:%u", conn_id, header->src, local_device_addr, msg_id, payload_len);
         decoded_len = 0;
         if (header->dst == local_device_addr)
         {
@@ -376,7 +380,7 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
         }
         else
         {
-            LOG(LOGLEVEL_INFO, "do route:\n");
+            LOG_INFO("do route:");
             do_send_msg(header->src, header->dst, msg_id, header->payload, payload_len);
         }
     }
@@ -384,7 +388,7 @@ int emsg_recv(uint8_t conn_id, const void *data, size_t len)
     emsg_conn_list[conn_id].decoder_state.decoded_len = decoded_len;
     emsg_conn_list[conn_id].decoder_state.escape_state = escape_state;
     if (errors != emsg_conn_list[conn_id].decoder_state.errors)
-        LOG(LOGLEVEL_ERROR, "conn(%u) decode errors: %u !\n", conn_id, emsg_conn_list[conn_id].decoder_state.errors);
+        LOG_ERROR("Conn(%u) decode errors: %u", conn_id, emsg_conn_list[conn_id].decoder_state.errors);
     return 0;
 }
 
@@ -453,18 +457,17 @@ static int do_send_msg(uint8_t src_addr, uint8_t dst_addr, uint16_t msg_id, cons
         return -1;
     if (EMSG_PAYLOAD_LEN_MAX < len)
     {
-        LOG(LOGLEVEL_ERROR, "send failed, data len(%zu) exceeds the max(%u), dst_addr:%u msg_id:%u !\n",
-            len, EMSG_PAYLOAD_LEN_MAX, dst_addr, msg_id);
+        LOG_ERROR("Send failed, data len(%zu) exceeds the max(%u), dst_addr:%u msg_id:%u", len, EMSG_PAYLOAD_LEN_MAX, dst_addr, msg_id);
         return -1;
     }
 
     if ((EMSG_DEVICE_ADDR_LOCAL == dst_addr) || (local_device_addr == dst_addr))
     {
-        LOG(LOGLEVEL_INFO, "send local msg, src:%u dst:%u id:%u len:%zu\n", src_addr, dst_addr, msg_id, len);
+        LOG_INFO("Send local msg, src:%u dst:%u id:%u len:%zu", src_addr, dst_addr, msg_id, len);
         do_msg_cb(EMSG_DEVICE_ADDR_LOCAL, msg_id, data, (uint16_t)len);
         return 0;
     }
-    LOG(LOGLEVEL_INFO, "send msg, src:%u dst:%u id:%u len:%zu\n", src_addr, dst_addr, msg_id, len);
+    LOG_INFO("Send msg, src:%u dst:%u id:%u len:%zu", src_addr, dst_addr, msg_id, len);
 
     header.sof[0] = EMSG_SOF_1;
     header.sof[1] = EMSG_SOF_2;
@@ -490,22 +493,22 @@ static int do_send_msg(uint8_t src_addr, uint8_t dst_addr, uint16_t msg_id, cons
 
     if (LOGLEVEL_DEBUG <= emsg_log_level)
     {
-        LOG(LOGLEVEL_DEBUG, "    header: ");
+        LOG_PRINT("--EMSG--     header: ");
         for (i = 0; i < sizeof(emsg_header_t); i++)
-            log_printf("%02x ", ((uint8_t *)&header)[i]);
-        log_printf("\n");
+            LOG_PRINT("%02x ", ((uint8_t *)&header)[i]);
+        LOG_PRINT("\n");
 
-        LOG(LOGLEVEL_DEBUG, "    data  : ");
+        LOG_PRINT("--EMSG--     data  : ");
         for (i = 0; i < len; i++)
-            log_printf("%02x ", ((uint8_t *)data)[i]);
-        log_printf("\n");
+            LOG_PRINT("%02x ", ((uint8_t *)data)[i]);
+        LOG_PRINT("\n");
 
-        LOG(LOGLEVEL_DEBUG, "    crc   : %02x %02x %02x %02x\n", crc_buf[0], crc_buf[1], crc_buf[2], crc_buf[3]);
+        LOG_PRINT("--EMSG--     crc   : %02x %02x %02x %02x\n", crc_buf[0], crc_buf[1], crc_buf[2], crc_buf[3]);
 
-        LOG(LOGLEVEL_DEBUG, "    encode: ");
+        LOG_PRINT("--EMSG--     encode: ");
         for (i = 0; i < _len; i++)
-            log_printf("%02x ", buf[i]);
-        log_printf("\n");
+            LOG_PRINT("%02x ", buf[i]);
+        LOG_PRINT("\n");
     }
 
     for (i = 0; i < EMSG_CONN_CFG_COUNT; i++)
@@ -529,7 +532,7 @@ static int do_send_msg(uint8_t src_addr, uint8_t dst_addr, uint16_t msg_id, cons
             return 0;
         }
     }
-    LOG(LOGLEVEL_ERROR, "send failed, dst addr(%u) is not configured !\n", dst_addr);
+    LOG_ERROR("Send failed, dst_addr(%u) is not configured", dst_addr);
     return -1;
 }
 
