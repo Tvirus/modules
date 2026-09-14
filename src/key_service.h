@@ -44,12 +44,12 @@ typedef union
 
 typedef void (*key_cb_t)(unsigned char key_id, unsigned char key_type, signed int event);
 
-extern void key_task(void);
-extern int key_register(unsigned char key_id, unsigned char key_type, const key_cfg_t *key_cfg);
-extern int key_register_cb(unsigned char key_id, key_cb_t cb);
+void key_task(void);
+int key_register(unsigned char key_id, unsigned char key_type, const key_cfg_t *key_cfg);
+int key_register_cb(unsigned char key_id, key_cb_t cb);
 #define BUTTON_RELEASED 0
 #define BUTTON_PRESSED  1
-extern int key_set_value(unsigned char key_id, signed int value);
+int key_set_value(unsigned char key_id, signed int value);
 
 
 #endif

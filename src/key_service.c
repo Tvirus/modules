@@ -22,7 +22,7 @@
      +-------<-------+--------<-------+--------<-------+
 
 1. 单击后抬起: 单击事件
-2. 单击后不抬起长按: 单击事件 + 长按事件
+2. 单击后不抬起长按: 长按事件
 3. 双击后抬起: 双击事件
 4. 双击后不抬起长按: 双击事件 + 长按事件
 5. 单击、连击或长按后抬起: 可选抬起事件
@@ -74,6 +74,7 @@ static unsigned char key_changed = 0;
 
 int key_register(unsigned char key_id, unsigned char key_type, const key_cfg_t *key_cfg)
 {
+    key_state_t *key_state;
     int i;
 
     if ((KEY_ID_INVALID == key_id) || (KEY_TYPE_INVALID == key_type) || (NULL == key_cfg))
@@ -81,32 +82,34 @@ int key_register(unsigned char key_id, unsigned char key_type, const key_cfg_t *
 
     for (i = 0; i < KEY_COUNT_MAX; i++)
     {
-        if (key_state_list[i].key_id == key_id)
+        key_state = &key_state_list[i];
+
+        if (key_state->key_id == key_id)
         {
             LOG(LOGLEVEL_ERROR, "register key_id conflict !");
             return -1;
         }
-        if (KEY_ID_INVALID != key_state_list[i].key_id)
+        if (KEY_ID_INVALID != key_state->key_id)
             continue;
 
-        memset(&key_state_list[i], 0, sizeof(key_state_list[i]));
-        key_state_list[i].key_id = key_id;
-        key_state_list[i].key_type = key_type;
-        key_state_list[i].key_cfg = *key_cfg;
+        memset(key_state, 0, sizeof(*key_state));
+        key_state->key_id = key_id;
+        key_state->key_type = key_type;
+        key_state->key_cfg = *key_cfg;
         if (KEY_TYPE_BTN == key_type)
         {
-            if (   (0 == key_state_list[i].key_cfg.btn_cfg.spt_multiclick)
-                && (0 == key_state_list[i].key_cfg.btn_cfg.spt_long_press)
-                && (0 == key_state_list[i].key_cfg.btn_cfg.trigger_on_release))
+            if (   (0 == key_state->key_cfg.btn_cfg.spt_multiclick)
+                && (0 == key_state->key_cfg.btn_cfg.spt_long_press)
+                && (0 == key_state->key_cfg.btn_cfg.trigger_on_release))
             {
                 LOG(LOGLEVEL_ERROR, "no event has been configured !");
                 return -1;
             }
-            if (   (1 < key_state_list[i].key_cfg.btn_cfg.spt_multiclick)
-                && (key_state_list[i].key_cfg.btn_cfg.spt_long_press)
-                && (key_state_list[i].key_cfg.btn_cfg.long_press_threshold < key_state_list[i].key_cfg.btn_cfg.click_interval))
+            if (   (1 < key_state->key_cfg.btn_cfg.spt_multiclick)
+                && (key_state->key_cfg.btn_cfg.spt_long_press)
+                && (key_state->key_cfg.btn_cfg.long_press_threshold < key_state->key_cfg.btn_cfg.click_interval))
             {
-                key_state_list[i].key_cfg.btn_cfg.long_press_threshold = key_state_list[i].key_cfg.btn_cfg.click_interval;
+                key_state->key_cfg.btn_cfg.long_press_threshold = key_state->key_cfg.btn_cfg.click_interval;
                 LOG(LOGLEVEL_ERROR, "click_interval is greater than long_press_threshold !");
             }
         }
@@ -216,6 +219,7 @@ static void do_cb(unsigned char key_id, unsigned char key_type, signed int event
         key_cb_list[i].cb(key_id, key_type, event);
     }
 }
+
 #define KEY_TASK_PERIOD  10  /* ms */
 void key_task(void)
 {
@@ -225,6 +229,7 @@ void key_task(void)
     signed int old_value;
     unsigned int last_press_ts;
     unsigned int last_ts;
+    key_state_t *key_state;
     int i;
 
 
@@ -236,72 +241,75 @@ void key_task(void)
 
     for (i = 0; i < KEY_COUNT_MAX; i++)
     {
-        if (KEY_ID_INVALID == key_state_list[i].key_id)
+        key_state = &key_state_list[i];
+
+        if (KEY_ID_INVALID == key_state->key_id)
             break;
 
-        if (KEY_TYPE_ABS == key_state_list[i].key_type)
+        if (KEY_TYPE_ABS == key_state->key_type)
         {
-            new_value = key_state_list[i].new_value;
-            if (key_state_list[i].old_value == new_value)
+            new_value = key_state->new_value;
+            if (key_state->old_value == new_value)
                 continue;
-            key_state_list[i].old_value = new_value;
-            do_cb(key_state_list[i].key_id, KEY_TYPE_ABS, new_value);
+            key_state->old_value = new_value;
+            do_cb(key_state->key_id, KEY_TYPE_ABS, new_value);
             continue;
         }
-        if (KEY_TYPE_REL == key_state_list[i].key_type)
+        if (KEY_TYPE_REL == key_state->key_type)
         {
             __disable_irq();
-            new_value = key_state_list[i].new_value;
-            key_state_list[i].new_value = 0;
+            new_value = key_state->new_value;
+            key_state->new_value = 0;
             __enable_irq();
             if (0 == new_value)
                 continue;
-            do_cb(key_state_list[i].key_id, KEY_TYPE_REL, new_value);
+            do_cb(key_state->key_id, KEY_TYPE_REL, new_value);
             continue;
         }
 
         /* KEY_TYPE_BTN */
         __disable_irq();
-        new_value = key_state_list[i].new_value;
-        old_value = key_state_list[i].old_value;
-        last_press_ts = key_state_list[i].last_press_ts;
-        last_ts = key_state_list[i].last_ts;
+        new_value = key_state->new_value;
+        old_value = key_state->old_value;
+        last_press_ts = key_state->last_press_ts;
+        last_ts = key_state->last_ts;
         __enable_irq();
-        if ((key_state_list[i].key_cfg.btn_cfg.debounce_delay > ((unsigned int)(HAL_GetTick() - last_ts))))
+        if ((key_state->key_cfg.btn_cfg.debounce_delay > ((unsigned int)(HAL_GetTick() - last_ts))))
             continue;
-        key_state_list[i].old_value = new_value;
+        key_state->old_value = new_value;
 
         /* 已产生n次连击且下一次连击已超时 */
-        if (   (key_state_list[i].click_state)
-            && (key_state_list[i].key_cfg.btn_cfg.click_interval < (HAL_GetTick() - last_press_ts)))
+        if (   (key_state->click_state)
+            && (key_state->key_cfg.btn_cfg.click_interval < (HAL_GetTick() - last_press_ts)))
         {
-            if (0 == key_state_list[i].cache_event)
-                do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, key_state_list[i].click_state);
-            key_state_list[i].click_state = 0;
+            if (0 == key_state->cache_event)
+                do_cb(key_state->key_id, KEY_TYPE_BTN, key_state->click_state);
+            key_state->click_state = 0;
 
             /* 补发之前忽略的释放事件 */
             if ( (BUTTON_RELEASED == old_value) && (BUTTON_RELEASED == new_value))
             {
-                if (key_state_list[i].cache_event)
+                if (key_state->cache_event)
                 {
-                    do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, BUTTON_EVENT_1_CLICK);
-                    key_state_list[i].cache_event = 0;
+                    do_cb(key_state->key_id, KEY_TYPE_BTN, BUTTON_EVENT_1_CLICK);
+                    key_state->cache_event = 0;
                 }
-                if (key_state_list[i].key_cfg.btn_cfg.trigger_on_release)
-                    do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, BUTTON_RELEASED);
+                if (key_state->key_cfg.btn_cfg.trigger_on_release)
+                    do_cb(key_state->key_id, KEY_TYPE_BTN, BUTTON_RELEASED);
             }
         }
+
         /* 一直按下 */
         if ((BUTTON_PRESSED == old_value) && (BUTTON_PRESSED == new_value))
         {
-            if ((0 == key_state_list[i].key_cfg.btn_cfg.spt_long_press) || (key_state_list[i].long_press_state))
+            if ((0 == key_state->key_cfg.btn_cfg.spt_long_press) || (key_state->long_press_state))
                 continue;
 
-            if (key_state_list[i].key_cfg.btn_cfg.long_press_threshold < (HAL_GetTick() - last_press_ts))
+            if (key_state->key_cfg.btn_cfg.long_press_threshold < (HAL_GetTick() - last_press_ts))
             {
-                do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, BUTTON_EVENT_LONG_PRESS);
-                key_state_list[i].long_press_state = 1;
-                key_state_list[i].cache_event = 0;
+                do_cb(key_state->key_id, KEY_TYPE_BTN, BUTTON_EVENT_LONG_PRESS);
+                key_state->long_press_state = 1;
+                key_state->cache_event = 0;
             }
             continue;
         }
@@ -309,37 +317,37 @@ void key_task(void)
         if ((BUTTON_PRESSED == old_value) && (BUTTON_RELEASED == new_value))
         {
             /* 在连击结束前不触发释放事件 */
-            if (0 == key_state_list[i].click_state)
+            if (0 == key_state->click_state)
             {
-                if (key_state_list[i].cache_event)
+                if (key_state->cache_event)
                 {
-                    do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, BUTTON_EVENT_1_CLICK);
-                    key_state_list[i].cache_event = 0;
+                    do_cb(key_state->key_id, KEY_TYPE_BTN, BUTTON_EVENT_1_CLICK);
+                    key_state->cache_event = 0;
                 }
-                if (key_state_list[i].key_cfg.btn_cfg.trigger_on_release)
-                    do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, BUTTON_RELEASED);
+                if (key_state->key_cfg.btn_cfg.trigger_on_release)
+                    do_cb(key_state->key_id, KEY_TYPE_BTN, BUTTON_RELEASED);
             }
-            key_state_list[i].long_press_state = 0;
+            key_state->long_press_state = 0;
             continue;
         }
         /* 按下 */
         if ((BUTTON_RELEASED == old_value) && (BUTTON_PRESSED == new_value))
         {
-            if (key_state_list[i].key_cfg.btn_cfg.spt_multiclick > key_state_list[i].click_state)
+            if (key_state->key_cfg.btn_cfg.spt_multiclick > key_state->click_state)
             {
-                key_state_list[i].click_state++;
-                /* 缓存支持单击和长按时的第一次按下 */
-                if (   (1 == key_state_list[i].key_cfg.btn_cfg.spt_multiclick)
-                    && (1 == key_state_list[i].click_state)
-                    && key_state_list[i].key_cfg.btn_cfg.spt_long_press)
-                    key_state_list[i].cache_event = 1;
+                key_state->click_state++;
+                /* 同时支持单击和长按时缓存第一次按下 */
+                if (   (1 == key_state->key_cfg.btn_cfg.spt_multiclick)
+                    && (1 == key_state->click_state)
+                    && key_state->key_cfg.btn_cfg.spt_long_press)
+                    key_state->cache_event = 1;
                 else
-                    key_state_list[i].cache_event = 0;
-                if (key_state_list[i].key_cfg.btn_cfg.spt_multiclick <= key_state_list[i].click_state)
+                    key_state->cache_event = 0;
+                if (key_state->key_cfg.btn_cfg.spt_multiclick <= key_state->click_state)
                 {
-                    if (0 == key_state_list[i].cache_event)
-                        do_cb(key_state_list[i].key_id, KEY_TYPE_BTN, key_state_list[i].click_state);
-                    key_state_list[i].click_state = 0;
+                    if (0 == key_state->cache_event)
+                        do_cb(key_state->key_id, KEY_TYPE_BTN, key_state->click_state);
+                    key_state->click_state = 0;
                 }
             }
             continue;
