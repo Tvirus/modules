@@ -192,8 +192,6 @@ int key_set_value(unsigned char key_id, signed int value)
             __disable_irq();
             key_state_list[i].new_value = value;
             key_state_list[i].last_ts = ts;
-            if (BUTTON_PRESSED == value)
-                key_state_list[i].last_press_ts = ts;
             __enable_irq();
 
             key_changed = 1;
@@ -229,6 +227,7 @@ void key_task(void)
     signed int old_value;
     unsigned int last_press_ts;
     unsigned int last_ts;
+    unsigned int check_ts;
     key_state_t *key_state;
     int i;
 
@@ -279,15 +278,19 @@ void key_task(void)
         key_state->old_value = new_value;
 
         /* 已产生n次连击且下一次连击已超时 */
+        if ((BUTTON_RELEASED == old_value) && (BUTTON_PRESSED == new_value))
+            check_ts = last_ts;
+        else
+            check_ts = HAL_GetTick();
         if (   (key_state->click_state)
-            && (key_state->key_cfg.btn_cfg.click_interval < (HAL_GetTick() - last_press_ts)))
+            && (key_state->key_cfg.btn_cfg.click_interval < (check_ts - last_press_ts)))
         {
             if (0 == key_state->cache_event)
                 do_cb(key_state->key_id, KEY_TYPE_BTN, key_state->click_state);
             key_state->click_state = 0;
 
             /* 补发之前忽略的释放事件 */
-            if ( (BUTTON_RELEASED == old_value) && (BUTTON_RELEASED == new_value))
+            if (BUTTON_RELEASED == old_value)
             {
                 if (key_state->cache_event)
                 {
@@ -333,6 +336,7 @@ void key_task(void)
         /* 按下 */
         if ((BUTTON_RELEASED == old_value) && (BUTTON_PRESSED == new_value))
         {
+            key_state->last_press_ts = last_ts;
             if (key_state->key_cfg.btn_cfg.spt_multiclick > key_state->click_state)
             {
                 key_state->click_state++;
