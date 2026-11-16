@@ -12,7 +12,7 @@
 #define LOG_ERROR(fmt, arg...)  do{if((LOGLEVEL_ERROR) <= j1939_log_level)log_printf("--J1939-- " fmt "\n", ##arg);}while(0)
 #define LOG_INFO(fmt, arg...)   do{if((LOGLEVEL_INFO)  <= j1939_log_level)log_printf("--J1939-- " fmt "\n", ##arg);}while(0)
 #define LOG_DEBUG(fmt, arg...)  do{if((LOGLEVEL_DEBUG) <= j1939_log_level)log_printf("--J1939-- " fmt "\n", ##arg);}while(0)
-unsigned int j1939_log_level = 0;
+unsigned int j1939_log_level = LOGLEVEL_ERROR;
 
 
 #ifndef CAN_MSG_COUNT_MAX
