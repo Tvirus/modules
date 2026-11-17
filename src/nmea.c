@@ -11,7 +11,7 @@
 #define LOGLEVEL_INFO 2
 #define LOGLEVEL_DEBUG 3
 #define LOG(level, fmt, arg...)  do{if((level) <= nmea_log_level)log_printf("--NMEA-- " fmt "\n", ##arg);}while(0)
-unsigned char nmea_log_level = LOGLEVEL_INFO;
+unsigned int nmea_log_level = LOGLEVEL_INFO;
 
 
 static char* check_sentence(const char *str)
@@ -32,7 +32,6 @@ static char* check_sentence(const char *str)
         LOG(LOGLEVEL_ERROR, "sentence is empty !");
         return NULL;
     }
-    checksum = *str++;
     while ('*' != *str)
     {
         if ('\0' == *str)
