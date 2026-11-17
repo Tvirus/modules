@@ -150,6 +150,7 @@ static char* str_dm_to_d(const char *dm, unsigned char exponent, int64_t *degree
     uint32_t d;
     uint32_t m1;
     uint32_t m2;
+    unsigned char m2_tail_nonzero;
     char *p = NULL;
     int i;
 
@@ -160,11 +161,13 @@ static char* str_dm_to_d(const char *dm, unsigned char exponent, int64_t *degree
         factor *= 10;
 
     integer = (uint32_t)strtoul(dm, &p, 10);
-
     if ((NULL == p) || ('.' != *p))
         return NULL;
-    m2 = 0;
+    d = integer / 100;
+    m1 = integer % 100;
+
     p++;
+    m2 = 0;
     for (i = 0; i < exponent; i++)
     {
         if (!isdigit(*p))
@@ -173,19 +176,38 @@ static char* str_dm_to_d(const char *dm, unsigned char exponent, int64_t *degree
     }
     for (; i < exponent; i++)
         m2 *= 10;
-
-    d = integer / 100;
-    m1 = integer % 100;
-    *degree = ((uint64_t)d) * factor + ((uint64_t)m1) * factor / 60 + ((uint64_t)m2) / 60;
-
+    m2_tail_nonzero = 0;
+    while (isdigit(*p))
+    {
+        if ('0' != *p)
+            m2_tail_nonzero = 1;
+        p++;
+    }
     if (',' != *p++)
         return NULL;
-    if (('N' == *p) || ('E' == *p))
-        ;
-    else if (('S' == *p) || ('W' == *p))
-        *degree = -(*degree);
+
+    if (('N' == *p) || ('S' == *p))
+    {
+        if (   (90 < d)
+            || ((90 == d) && (m1 || m2 || m2_tail_nonzero))
+            || (60 <= m1))
+            return NULL;
+    }
+    else if (('E' == *p) || ('W' == *p))
+    {
+        if (   (180 < d)
+            || ((180 == d) && (m1 || m2 || m2_tail_nonzero))
+            || (60 <= m1))
+            return NULL;
+    }
     else
         return NULL;
+    if ((',' != *(p + 1)) && ('*' != *(p + 1)))
+        return NULL;
+
+    *degree = ((uint64_t)d) * factor + (((uint64_t)m1) * factor + m2) / 60;
+    if (('S' == *p) || ('W' == *p))
+        *degree = -(*degree);
 
     return p + 1;
 }
@@ -231,7 +253,9 @@ static int nmea_parse_gga(const char *str, format_gga_t *gga)
     }
     if (',' != *(p[1] + 1))
     {
-        if (NULL == str_dm_to_d(p[1] + 1, 9, &gga->latitude))
+        if (   (NULL == p[2])
+            || (('N' != *(p[2] + 1)) && ('S' != *(p[2] + 1)))
+            || (NULL == str_dm_to_d(p[1] + 1, 9, &gga->latitude)))
         {
             LOG(LOGLEVEL_ERROR, "gga latitude format err !");
             return -1;
@@ -252,7 +276,9 @@ static int nmea_parse_gga(const char *str, format_gga_t *gga)
     }
     if (',' != *(p[3] + 1))
     {
-        if (NULL == str_dm_to_d(p[3] + 1, 9, &gga->longitude))
+        if (   (NULL == p[4])
+            || (('E' != *(p[4] + 1)) && ('W' != *(p[4] + 1)))
+            || (NULL == str_dm_to_d(p[3] + 1, 9, &gga->longitude)))
         {
             LOG(LOGLEVEL_ERROR, "gga longitude format err !");
             return -1;
@@ -518,7 +544,9 @@ static int nmea_parse_rmc(const char *str, format_rmc_t *rmc)
     }
     if (',' != *(p[2] + 1))
     {
-        if (NULL == str_dm_to_d(p[2] + 1, 9, &rmc->latitude))
+        if (   (NULL == p[3])
+            || (('N' != *(p[3] + 1)) && ('S' != *(p[3] + 1)))
+            || (NULL == str_dm_to_d(p[2] + 1, 9, &rmc->latitude)))
         {
             LOG(LOGLEVEL_ERROR, "rmc latitude format err !");
             return -1;
@@ -539,7 +567,9 @@ static int nmea_parse_rmc(const char *str, format_rmc_t *rmc)
     }
     if (',' != *(p[4] + 1))
     {
-        if (NULL == str_dm_to_d(p[4] + 1, 9, &rmc->longitude))
+        if (   (NULL == p[5])
+            || (('E' != *(p[5] + 1)) && ('W' != *(p[5] + 1)))
+            || (NULL == str_dm_to_d(p[4] + 1, 9, &rmc->longitude)))
         {
             LOG(LOGLEVEL_ERROR, "rmc longitude format err !");
             return -1;
