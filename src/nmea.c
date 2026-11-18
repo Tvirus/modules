@@ -447,8 +447,6 @@ static int nmea_parse_gga(const char *str, format_gga_t *gga)
     {
         LOG(LOGLEVEL_DEBUG, "gga age_of_diff_data is none");
         gga->age_of_diff_data_valid = 0;
-        gga->diff_station_id_valid = 0;
-        return 0;
     }
 
     /* diff_station_id */
@@ -457,7 +455,7 @@ static int nmea_parse_gga(const char *str, format_gga_t *gga)
         LOG(LOGLEVEL_ERROR, "gga diff_station_id not exist !");
         return -1;
     }
-    if (',' != *(p[13] + 1))
+    if ('*' != *(p[13] + 1))
     {
         if (NULL == str_to_int(p[13] + 1, 0, &val))
         {
