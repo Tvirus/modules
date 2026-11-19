@@ -343,7 +343,7 @@ int j1939_create_large_msg_sending(unsigned int chn, const j1939_msg_header_t *h
 
     for (i = 0; i < J1939_LARGE_MSG_TX_MAX; i++)
     {
-        if (NULL != j1939_large_msg_tx_list[i].data)
+        if (j1939_large_msg_tx_list[i].data)
             continue;
 
         j1939_large_msg_tx_list[i].chn = chn;
@@ -368,7 +368,7 @@ int j1939_create_large_msg_sending(unsigned int chn, const j1939_msg_header_t *h
 
 int j1939_destroy_large_msg_sending(int handle)
 {
-    if ((J1939_LARGE_MSG_TX_MAX <= handle) || (0 > handle))
+    if ((J1939_LARGE_MSG_TX_MAX <= handle) || (0 > handle) || (NULL == j1939_large_msg_tx_list[handle].data))
         return -1;
 
     LOG_INFO("Destroy large sending: chn %u [%02X->%02X] PGN:%06x",
@@ -737,7 +737,8 @@ void j1939_task(void)
             /* 相同目的和源地址只能有一个连接 */
             for (j = 0; j < J1939_LARGE_MSG_TX_MAX; j++)
             {
-                if (   (j1939_large_msg_tx_list[j].chn == chn)
+                if (   j1939_large_msg_tx_list[j].data
+                    && (j1939_large_msg_tx_list[j].chn == chn)
                     && (j1939_large_msg_tx_list[j].header.dst_addr == dst)
                     && (j1939_large_msg_tx_list[j].header.src_addr == src)
                     && J1939_LARGE_MSG_TX_STARTED(j1939_large_msg_tx_list[j].state))
